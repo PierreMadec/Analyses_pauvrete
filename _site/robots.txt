@@ -1,1 +1,1 @@
-Sitemap: https://PierreMadec.github.io/Analyses_pauvrete/sitemap.xml
+Sitemap: https://pierremadec.github.io/Analyses_pauvrete/sitemap.xml
