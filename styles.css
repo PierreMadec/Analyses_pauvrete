@@ -1,0 +1,87 @@
+/* Styles de présentation OFCE */
+
+/* Sections de couleur */
+.reveal section[data-background-color="#003366"] {
+  background: linear-gradient(135deg, #003366 0%, #004d80 100%);
+  color: white;
+}
+
+.reveal section[data-background-color="#003366"] h1,
+.reveal section[data-background-color="#003366"] h2 {
+  color: white;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+/* Titres principaux */
+.reveal h1 {
+  font-size: 2.5em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+  color: #003366;
+}
+
+.reveal h2 {
+  font-size: 1.8em;
+  color: #003366;
+  margin-bottom: 0.3em;
+}
+
+/* Contenu courant */
+.reveal p {
+  font-size: 1.2em;
+  line-height: 1.6;
+}
+
+.reveal li {
+  margin-bottom: 0.5em;
+  font-size: 1.1em;
+}
+
+/* Notes de présentation */
+.reveal .notes {
+  font-size: 0.9em;
+  color: #666;
+  margin-top: 1em;
+  padding: 0.5em;
+  background: #f5f5f5;
+  border-left: 3px solid #003366;
+}
+
+/* Footer discret */
+.reveal .footer {
+  font-size: 0.8em;
+  color: #666;
+}
+
+/* Graphiques plus lisibles */
+.reveal figure img {
+  max-height: 500px;
+  border-radius: 4px;
+}
+
+/* Effet hover sur listes incrémentales */
+.reveal .incremental li {
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+
+.reveal .incremental li.current-fragment {
+  opacity: 1;
+  color: #003366;
+  font-weight: 500;
+}
+
+/* Code */
+.reveal code {
+  padding: 0.1em 0.3em;
+  background: #f5f5f5;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+/* Bloc emphase */
+.reveal blockquote {
+  border-left: 4px solid #003366;
+  padding-left: 1em;
+  font-style: italic;
+}

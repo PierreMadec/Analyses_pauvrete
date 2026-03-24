@@ -1,0 +1,26 @@
+/* Masquer les carrés de liste dans Reveal.js */
+.reveal ul li::before,
+.reveal ol li::before {
+  content: "" !important;
+  margin-right: 0 !important;
+}
+
+/* Assurer que les titres n'ont pas de symboles */
+.reveal h1::before,
+.reveal h2::before,
+.reveal h3::before {
+  content: "" !important;
+}
+
+/* Listes - style simple */
+.reveal ul li {
+  list-style: none;
+  margin-left: 0;
+  padding-left: 1.5em;
+}
+
+.reveal ul li::before {
+  content: "•" !important;
+  position: absolute;
+  margin-left: -1.5em;
+}
