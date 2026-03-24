@@ -1,0 +1,6 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Analyse de la pauvreté monétaire en France"

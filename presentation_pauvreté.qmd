@@ -1,0 +1,395 @@
+---
+title: "Évolution de la pauvreté monétaire en France"
+subtitle: "Dynamiques, déterminants et reste à vivre (2005-2023)"
+author: "Pierre Madec — OFCE, Sciences Po"
+author-footer: "P. Madec"
+date: today
+format:
+  revealjs:
+    toc: true
+    toc-title: "Plan"
+    toc-depth: 2
+    slide-level: 2
+    theme:
+      - simple
+      - _extensions/ofce/pres/ofce-pres.scss
+    logo: _extensions/ofce/pres/ofce_m.png
+    slide-number: c/t
+    center: false
+    navigation-mode: linear
+    css: custom-revealjs.css
+---
+
+```{r}
+#| include: false
+library(ggiraph)
+library(ggplot2)
+library(tidyverse)
+path_g  <- "graphiques"
+is_html <- knitr::is_html_output()
+
+show_girafe <- function(rds_path, width_svg = 10, height_svg = 6) {
+  g <- readRDS(rds_path)
+  if (is_html) {
+    girafe(
+      ggobj = g,
+      width_svg = width_svg,
+      height_svg = height_svg,
+      options = list(
+        opts_hover(css = "opacity:0.8;stroke-width:2px;filter:brightness(0.85);cursor:pointer;"),
+        opts_tooltip(css = "background-color:white;color:black;padding:8px;border-radius:4px;font-size:13px;box-shadow:2px 2px 6px rgba(0,0,0,0.3);"),
+        opts_hover_inv(css = "opacity:0.3;"),
+        opts_sizing(rescale = TRUE, width = 1)
+      )
+    )
+  } else {
+    print(g)
+  }
+}
+```
+
+# Pauvreté monétaire en France : une dynamique préoccupante {.section}
+
+## Taux de pauvreté: plusieurs mesures possible
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g1_taux_pauvrete.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Avant redistribution** : revenus du travail et du capital
+- **Après redistribution** : intègre les transferts sociaux
+- **Seuil gelé** : 2005 revalorisé par inflation seulement
+- Hausse de 15,4% en 2023 — plus haut depuis années 1990
+:::
+
+## RSA, SMIC et revenu médian : le décrochage depuis 2020
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g3_rsa_smic_median.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- SMIC : +55% depuis 2005 (indexation automatique inflation)
+- Revenu médian : +50% depuis 2005
+- RSA : +43% depuis 2005 (décalage structurel)
+- 10 points d'écart RSA/SMIC depuis 2014
+:::
+
+# Déterminants de la hausse : deux regards complémentaires {.section}
+
+## Décomposition séquentielle de la hausse
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g2_decomposition.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Effet seuil** : principal (+5 pts en 2022-23)
+- **Revenus primaires** : négatif (-2 à -3 pts) → hausse du taux emploi
+- **Redistribution** : dégradation progressive
+- **Structure** : modeste (monoparentalité ↑)
+:::
+
+## Oaxaca-Blinder : décomposition par variable
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g6_oaxaca_variables.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Composition** : diplôme protecteur (-0,5 pt), CJ polarisé (+0,3 pt)
+- **Coefficients** : CJ domine (-0,6 pt emploi), activité indiv. (+0,17 pt)
+- Hiérarchie : CJ > diplôme > type ménage > activité indiv.
+:::
+
+## Détail des contributions par composition
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g7_oaxaca_composition.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Diplôme supérieur : -0,35 pt (éduc. ↑)
+- Sans diplôme : -0,25 pt (part ↓)
+- Ages 65-74 et 75+ : protecteurs
+- CJ emploi/inactif : +0,15/+0,12 pt (polarisation)
+:::
+
+## Détail des contributions par coefficients
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g8_oaxaca_coefficients.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- CJ emploi : -0,8 pt (bi-activité requise)
+- CJ inactif : +0,3 pt
+- Monoparentale : +0,15 pt
+- Femme : +0,1 pt
+- Diplôme supérieur : -0,3 pt
+:::
+
+# Les travailleurs pauvres : profil et conditions {.section}
+
+## Taux de pauvreté selon l'activité
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g11_taux_par_activite.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Employés : ~7% en 2017 → 9% en 2023
+- Chômeurs : ~30-35%
+- Inactifs : ~20-25%
+- Paradoxe : amélioration marché du travail ≠ baisse pauvreté
+:::
+
+## Composition des ménages pauvres : polarisation emploi dans couples
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g15_tp_typmen.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Non pauvres** : couples + enf. 45-50%, couples s. enf. 25%
+- **Pauvres** : couples + enf. ~40%, monopar. + seuls ~50%
+- Stabilité composition contraste avec dégradation niveaux de vie
+- Tension individu/ménage : revenu unique → pauvreté
+:::
+
+## Contrats de travail des travailleurs pauvres
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g16_tp_contrat.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Pauvres** : CDD/intérim surreprésentés
+- **Non pauvres** : CDI largement dominant
+- Instabilité contractuelle → salaires bas
+- Mais : part substantielle pauvres en CDI (tension ménage/revenu)
+:::
+
+## Catégories socioprofessionnelles
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g17_tp_pcs.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Pauvres** : ouvriers + employés surreprésentés
+- **Non pauvres** : cadres/prof. intermédiaires dominants
+- Ouvrier CDI SMIC temps plein + 3 enfants + conj. inactive = pauvreté
+- CSP ≠ cause principale (rôle ménage prédominant)
+:::
+
+## Revenus et prestations des travailleurs pauvres
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g14_tp_decomp.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Revenu primaire : composante dominante (progressif nominalement)
+- Prime d'activité : rôle ↑ depuis 2016
+- APL : rôle ↓ depuis réforme 2017
+- RSA : dévalué réellement
+- Pouvoir achat stagne malgré progression nominale
+:::
+
+# Focus : les familles monoparentales {.section}
+
+## Décomposition niveau de vie (monoparentales)
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g13_mono_decomp.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Revenu primaire ↑ (SMIC, emploi femmes)
+- Mais : moins vite que médiane
+- Prestations sociales ne compensent pas ↑ seuil
+- RSA -10 pts / SMIC, APL gelée, AF érodées
+:::
+
+## Taux de pauvreté monoparentales selon activité
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g18_mono_activite.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Inactives : ~30-35% (highest)
+- Actives : ~10-12% (amélioration marché travail insuff.)
+- Chômage : intermédiaire
+- Aggravation monopar. en emploi 2017-23 malgré contexte emploi
+:::
+
+# Au-delà du monétaire : le reste à vivre {.section}
+
+## Part des dépenses contraintes (alimentation + logement)
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "part_contrainte_pauvres.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Pauvres** : ~40% du NV
+- **Non pauvres** : ~27% du NV
+- Écart se creuse inflation 2022-23
+- Prix alimentaires : +27% entre 2018-23
+:::
+
+## Reste à vivre mensuel après dépenses contraintes
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "rav_mensuel_pauvres.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- **Pauvres** : quelques centaines €/UC/mois
+- Doit couvrir : transports, santé, habillement, éducation, loisirs
+- **Non pauvres** : trajectoire croissante
+- Double peine : inflation forte + marge faible
+:::
+
+## Structure de consommation (parts du NV)
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "conso_pauvres_vs_nonpauvres.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Alimentation : 2x plus lourd (pauvres vs non-pauvres)
+- Logement+énergie : différentiel similaire
+- Loisirs, restauration, habillement : comprimés chez pauvres
+- Décrochage 2022-23 particulièrement marqué alimentation
+:::
+
+## Gradient par quintile : inégalités budgétaires
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "part_contrainte_quintile.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- Q1 : ~40% dépenses contraintes
+- Q5 : ~15% dépenses contraintes
+- Gradient prononcé et croissant
+- Hausse différenciée prix par poste → amplifie inégalités
+:::
+
+# Coûts budgétaires de l'éradication {.section}
+
+## Coût théorique d'éradication (poverty gap)
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g4_cout_eradication.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- 2005 : 23 Md€ courants
+- 2023 : 33 Md€ courants (+45%)
+- Euros constants : +18% en réels
+- ~500€/ménage/mois en 2023 (60% seuil)
+- 1,2% du PIB au seuil 60%
+:::
+
+## Coût marginal : réduction intensité pauvreté
+
+```{r}
+#| echo: false
+#| fig-height: 7
+show_girafe(file.path(path_g, "g5_cout_intensite.rds"), width_svg = 12, height_svg = 7)
+```
+
+:::{.notes}
+- 1 point d'intensité ~1 Md€ (constants 2023)
+- +40% depuis 2005 (0,75 → 1,05 Md€)
+- Croissance quasi-linéaire
+- **Conclusion** : intervention précoce économe
+:::
+
+# Synthèse et enjeux {.section}
+
+## Les trois piliers de la hausse 2017-23
+
+:::{.incremental}
+- **Effet seuil** (dominant) : médiane ↑ inflation, bas revenus stagnent
+- **Rendements dégradés** : bi-activité requise, diplôme + impactant, monoparentalité fragile
+- **Polarisation emploi** : couples biactifs s'enrichissent, couples mono-actifs s'appauvrissent
+:::
+
+## Facteurs explicatifs hiérarchisés
+
+:::{.incremental}
+1. **Activité du conjoint** (CJ) — coefficient : -0,6 / composition : +0,3
+2. **Diplôme** — composition : -0,5 (protecteur) / coefficient : -0,3
+3. **Type de ménage** — coefficient : +0,08
+4. **Activité individuelle** — coefficient : +0,17
+5. **Âge, sexe, immigration** — effets modestes
+:::
+
+## Tensions structurelles
+
+:::{.incremental}
+- **Mesure individuelle vs ménage** : emploi ≠ revenu ménage (genré, monoparentalité)
+- **Revenu primaire vs redistribution** : efficacité système socio-fiscal s'érode
+- **Seuil absolu vs relatif** : hausse inflation masquée par seuil relatif
+- **Budgets contraints** : pauvres ajustent volumes, données à structure de consommation constante
+:::
+
+## Recommandations de politique publique
+
+:::{.incremental}
+- Revalorisation minima sociaux (RSA décrochage -10 pts SMIC)
+- Renforcement APL (réforme 2017 contre-productive)
+- Politiques alimentaires ciblées (1er poste budget pauvres)
+- Services petite enfance (retours positifs sur parcours)
+- Indicateur « reste à vivre décent » complémentaire
+:::
+
+---
+
+**Questions ?**
+
+*Analyse complète disponible : analyse_pauvrete.html*
+*Données : INSEE ERFS 2005-2023 | Calculs : OFCE*
+

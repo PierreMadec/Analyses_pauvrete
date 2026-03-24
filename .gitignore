@@ -1,0 +1,15 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+_site/
+/.quarto/
+
+**/*.quarto_ipynb
+
+# Données ERFS (trop volumineux pour GitHub)
+ERFS*/
+**/*.dta
+**/*.sas7bdat
+**/*.sas
+**/*.RData

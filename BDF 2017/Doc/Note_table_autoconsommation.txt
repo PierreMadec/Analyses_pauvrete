@@ -1,0 +1,6 @@
+Les données sur les unités et quantités autoconsommées ne sont pas mises à disposition en raison de leur qualité.Elles ont été retravaillées afin de 
+produire des estimations en euros (table A04, à utiliser avec précaution), mais non expertisées pour un usage direct.
+Dans tous les cas, il n'est pas possible de reconstruire les données sur les unités et les quantités dans le FPR.
+
+Toutefois, si vous souhaitez utiliser ces données, certaines données "fragiles" peuvent être mises à disposition du CASD, 
+si le producteur est informé de leur usage. 
