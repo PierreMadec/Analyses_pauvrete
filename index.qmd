@@ -1,0 +1,7 @@
+---
+title: "Accueil"
+---
+
+```{=html}
+<meta http-equiv="refresh" content="0;URL='WP_dynamiques_pauvrete_2005_2023.html'" />
+```
