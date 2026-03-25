@@ -2,6 +2,56 @@ project:
   type: website
   output-dir: _site
 
+execute:
+  freeze: auto
+
 website:
-  title: "Analyse de la pauvreté monétaire en France"
-  site-url: https://pierremadec.github.io/Analyses_pauvrete/
+  title: "Dynamiques de la pauvreté monétaire en France (2005-2023)"
+  page-navigation: true
+  site-url: "https://pierremadec.github.io/Analyses_pauvrete/"
+  repo-url: "https://github.com/pierremadec/Analyses_pauvrete"
+  reader-mode: false
+  bread-crumbs: true
+
+  favicon: www/fofce.png
+
+  page-footer:
+    border: true
+    left: "![](/www/ccby4.png){height='16'}"
+    right: "propulsé par ![](/www/quarto.png){height='16'}"
+
+  navbar:
+    title: false
+    search: true
+    code-tools: true
+    background: "#FEFEFE"
+    logo: www/ofce_m.png
+    logo-alt: "OFCE"
+    logo-href: "https://www.ofce.fr/"
+    left:
+      - text: "Accueil"
+        icon: house
+        href: index.html
+      - text: "Working Paper"
+        icon: file-earmark-text
+        href: WP_dynamiques_pauvrete_2005_2023.html
+    right:
+      - text: "GitHub"
+        icon: github
+        href: https://github.com/pierremadec/Analyses_pauvrete
+
+comments:
+  hypothesis: false
+
+language:
+  fr:
+    other-links-title: "Autres contenus"
+
+bibliography: references.bib
+date-modified: now
+
+author:
+  - name: "Pierre Madec"
+    email: "pierre.madec@ofce.sciences-po.fr"
+    affiliation: "OFCE, Sciences Po Paris"
+    affiliation-url: "https://www.ofce.fr"

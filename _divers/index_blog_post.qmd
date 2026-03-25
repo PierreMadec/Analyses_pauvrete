@@ -1,0 +1,57 @@
+---
+title: "Pauvreté monétaire en France : une dynamique préoccupante"
+subtitle: "Quelles sont les déterminants de la hausse de la pauvreté ? Quel est le coût réel d'éradication ?"
+---
+
+## Pauvreté monétaire en France : une dynamique préoccupante
+
+Malgré un système de protection sociale parmi les plus développés d'Europe, la France consacre plus de 31 % de son PIB aux dépenses de protection sociale, contre 27 % en moyenne dans l'Union européenne. Pourtant, le taux de pauvreté a atteint **15,4 % en 2023**, soit près de 9,8 millions de personnes vivant sous le seuil de 60 % du niveau de vie médian. Ce niveau, le plus élevé observé depuis le milieu des années 1990, interroge la capacité du modèle social français à contenir la progression de la pauvreté dans un contexte de forte inflation et de mutations du marché du travail.
+
+Au-delà de la seule insuffisance de revenus monétaires, la pauvreté peut aussi s'exprimer dans des défaillances d'accès aux services publics, aux droits sociaux et aux modes de vie ordinaires. Ce document de travail propose une analyse approfondie en plusieurs temps à partir des données individuelles de l'Enquête Revenus Fiscaux et Sociaux (ERFS) de l'INSEE, couvrant la période 2005-2023.
+
+## Les déterminants de la hausse de la pauvreté
+
+La hausse observée depuis 2018 ne résulte pas d'un facteur unique mais de la conjonction de plusieurs mécanismes. Nous identifions et hiérarchisons quatre effets majeurs :
+
+- **Effet seuil** : L'augmentation la plus significative. Entre 2018 et 2023, cet effet a contribué à hauteur de +5 points à la croissance du taux de pauvreté. Il résulte directement de la poussée inflationniste — les revenus nominaux et la médiane ont progressé rapidement, entraînant le seuil de pauvreté à la hausse plus vite que les bas revenus.
+
+- **Effets de structure** : Les transformations démographiques et du marché du travail modifient la composition de la pauvreté. La polarisation de l'emploi au sein des couples (bi-activité chez les aisés, mono-activité chez les pauvres) et la progression des familles monoparentales renforcent les inégalités.
+
+- **Effet redistribution** : Contrairement aux attentes, l'effet est resté modéré. Cela souligne que, bien que les aides sociales jouent un rôle, elles ne compensent qu'imparfaitement l'érosion des revenus primaires.
+
+- **Revenus primaires** : La dégradation des revenus du travail — salaires stagnants, précarisation de l'emploi — constitue le socle de la hausse de la pauvreté.
+
+## Qui sont les pauvres ? Le paradoxe des travailleurs pauvres
+
+Une analyse détaillée révèle une réalité souvent invisible dans les statistiques agrégées : **les travailleurs pauvres**. Même en ayant un emploi, des ménages restent en dessous du seuil de pauvreté. Ce paradoxe s'explique par :
+
+- La prépondérance des contrats précaires et à temps partiel
+- Les bas salaires, particulièrement dans les services
+- La taille des ménages et le nombre de personnes à charge
+- L'absence de conjoint actif (monoactivité)
+
+Les familles monoparentales cumulent ce défi : un seul revenu pour des charges familiales élevées. Entre 2005 et 2023, leur taux de pauvreté s'est aggravé, illustrant l'insuffisance des prestations familiales.
+
+## Aller au-delà de la pauvreté monétaire : le « reste à vivre »
+
+Les chiffres de pauvreté monétaire cachent une autre réalité : celle des dépenses contraintes. Pour les ménages pauvres, l'alimentation et le logement représentent une part beaucoup plus importante du niveau de vie que pour les autres. Après déduction de ces deux postes essentiels, le « reste à vivre » mensuel par unité de consommation tombe à **moins de 200 euros** pour les ménages les plus modestes.
+
+Cette approche du « reste à vivre décent » complète la mesure traditionnelle en intégrant la réalité des dépenses contraintes des ménages modestes.
+
+## Les leviers d'action
+
+Ces résultats plaident pour une approche intégrant la réalité des dépenses contraintes. Les principaux leviers identifiés sont :
+
+- **Revalorisation ciblée des minima sociaux**, tenant compte de l'inflation réelle subie par les ménages modestes
+- **Renforcement des aides au logement**, dont l'efficacité s'érode face à la progression des loyers
+- **Politiques alimentaires** visant à atténuer le poids du premier poste de dépense (chèque alimentaire, tarification sociale)
+- **Renforcement des services publics** dédiés à la petite enfance
+- **Définition d'un « reste à vivre décent »** comme indicateur complémentaire au seuil de pauvreté monétaire
+
+Au-delà de ces leviers, un enjeu majeur demeure largement invisible dans les chiffres : le **non-recours aux aides sociales**. Même lorsque des dispositifs existent, une part significative des ménages éligibles ne les revendique pas — par manque d'information, complexité administrative, stigmatisation ou défiance. Simplifier l'accès aux prestations est donc aussi crucial que leur montant.
+
+C'est dans ce contexte que les prochains mois seront marqués par les débats parlementaires autour de la mise en place de l'**Allocation Sociale Unifiée (ASU)**. Au-delà de la simple mesure technique se joue dans ces débats une partie de l'avenir des politiques de lutte contre la pauvreté. Une fusion efficace des minima sociaux pourrait non seulement simplifier l'administration des aides, mais aussi réduire le non-recours et renforcer le filet de sécurité. **Il appartient aux parlementaires de s'en saisir avec la conscience que cet enjeu dépasse la seule question budgétaire : c'est un enjeu d'égalité et de cohésion sociale.**
+
+---
+
+*Pour une analyse complète et détaillée, consultez le [Working Paper complet](WP_dynamiques_pauvrete_2005_2023.html). Source : INSEE, ERFS 2005-2023, calculs de l'auteur.*
