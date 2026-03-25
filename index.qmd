@@ -14,9 +14,6 @@ citation:
 authors-title: "Auteur & résumé"
 format:
   wp-html: default
-  wp-pdf:
-    output-file: "OFCEWP2026-06.pdf"
-    tbl-pos: "H"
 bibliography: references.bib
 crossref:
   fig-prefix: "Graphique"

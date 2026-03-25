@@ -41,7 +41,11 @@ comments:
 
 language:
   fr:
-    other-links-title: "Autres contenus"
+    other-links-title: "Autres formats"
+
+other-links:
+  - text: "PDF (wp)"
+    href: "index.pdf"
 
 wp: 06
 annee: 2026
@@ -59,3 +63,5 @@ format:
   ofce-html:
     link-external-icon: true
     smooth-scroll: true
+  ofce-pdf:
+    keep-tex: false
