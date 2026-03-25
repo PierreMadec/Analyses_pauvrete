@@ -5,9 +5,18 @@ author:
   - name: "Pierre Madec"
     email: "pierre.madec@ofce.sciences-po.fr"
     affiliation: "OFCE, Sciences Po Paris"
-date: today
+abstract: "Ce document de travail propose une analyse de la dynamique de la pauvreté monétaire en France entre 2005 et 2023. Il examine les déterminants de la hausse observée depuis 2018 en distinguant les effets de seuil, de structure, de redistribution et de revenus primaires. Une attention particulière est portée aux travailleurs pauvres et aux ménages avec enfants. Au-delà de la pauvreté monétaire, l'analyse du « reste à vivre » permet de tenir compte de la réalité des dépenses contraintes."
+citation:
+  type: article-journal
+  container-title: "Document de travail de l'OFCE"
+  issue: 2026-06
+  url: https://pierremadec.github.io/Analyses_pauvrete/
+authors-title: "Auteur & résumé"
 format:
-  ofce/wp-html: default
+  wp-html: default
+  wp-pdf:
+    output-file: "OFCEWP2026-06.pdf"
+    tbl-pos: "H"
 bibliography: references.bib
 crossref:
   fig-prefix: "Graphique"

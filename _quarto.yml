@@ -6,13 +6,12 @@ execute:
   freeze: auto
 
 website:
-  title: "Dynamiques de la pauvreté monétaire en France (2005-2023)"
+  title: "Dynamiques de la pauvreté monétaire en France"
   page-navigation: true
   site-url: "https://pierremadec.github.io/Analyses_pauvrete/"
   repo-url: "https://github.com/pierremadec/Analyses_pauvrete"
   reader-mode: false
   bread-crumbs: true
-
   favicon: www/fofce.png
 
   page-footer:
@@ -29,12 +28,9 @@ website:
     logo-alt: "OFCE"
     logo-href: "https://www.ofce.fr/"
     left:
-      - text: "Accueil"
+      - text: "wp 2026-06"
         icon: house
         href: index.html
-      - text: "Working Paper"
-        icon: file-earmark-text
-        href: WP_dynamiques_pauvrete_2005_2023.html
     right:
       - text: "GitHub"
         icon: github
@@ -47,7 +43,10 @@ language:
   fr:
     other-links-title: "Autres contenus"
 
+wp: 06
+annee: 2026
 bibliography: references.bib
+date: "2026-03-25"
 date-modified: now
 
 author:
@@ -55,3 +54,8 @@ author:
     email: "pierre.madec@ofce.sciences-po.fr"
     affiliation: "OFCE, Sciences Po Paris"
     affiliation-url: "https://www.ofce.fr"
+
+format:
+  ofce-html:
+    link-external-icon: true
+    smooth-scroll: true
