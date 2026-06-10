@@ -1,0 +1,841 @@
+---
+title: "CNLE – Chiffrages Partie I"
+subtitle: "Indicateurs de pauvreté monétaire et coût d'éradication"
+author:
+  - name: "Pierre Madec"
+    email: "pierre.madec@ofce.sciences-po.fr"
+    affiliation: "OFCE, Sciences Po Paris"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-title: "Sommaire"
+    number-sections: true
+    embed-resources: true
+    code-fold: true
+    code-tools: true
+    smooth-scroll: true
+    theme: flatly
+    fig-width: 10
+    fig-height: 5
+execute:
+  message: false
+  warning: false
+lang: fr
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggiraph)
+library(gt)
+
+# ── Chargement des données ────────────────────────────────────────────────────
+data_all <- readRDS("../figure/data_all.rds")
+
+params_macro <- read_csv("../data/parametres_macro.csv", show_col_types = FALSE)
+ipc <- setNames(params_macro$ipc, as.character(params_macro$annee))
+
+# ── Fonctions utilitaires ─────────────────────────────────────────────────────
+mediane_ponderee <- function(x, w) {
+  tibble(x = x, w = w) |>
+    filter(!is.na(x), !is.na(w), w > 0) |>
+    arrange(x) |>
+    mutate(cum_w = cumsum(w)) |>
+    filter(cum_w >= sum(w) / 2) |>
+    slice(1) |>
+    pull(x)
+}
+
+# Calcule taux/effectif (niveau individu) + intensité/coût (niveau ménage).
+indicateurs_pauvrete <- function(df_ind, seuils = c(0.40, 0.45, 0.50, 0.55, 0.60),
+                                  mediane_pop = NULL) {
+  df_men  <- distinct(df_ind, ident, .keep_all = TRUE)
+  mediane <- if (!is.null(mediane_pop)) mediane_pop else
+               mediane_ponderee(df_ind$nivviem, df_ind$wprm)
+  map_dfr(seuils, function(s) {
+    seuil      <- s * mediane
+    pauvre_ind <- df_ind$nivviem < seuil
+    pauvre_men <- df_men$nivviem < seuil
+    taux       <- sum(df_ind$wprm[pauvre_ind], na.rm = TRUE) /
+                  sum(df_ind$wprm,             na.rm = TRUE) * 100
+    effectif   <- sum(df_ind$wprm[pauvre_ind], na.rm = TRUE) / 1e6
+    intensite  <- weighted.mean(
+      pmax(seuil - df_men$nivviem, 0) / seuil,
+      df_men$wprm * pauvre_men, na.rm = TRUE
+    ) * 100
+    ecart      <- sum(pmax(seuil - df_men$nivviem, 0) * df_men$nb_uci * df_men$wprm,
+                      na.rm = TRUE)
+    tibble(
+      seuil_pct = s * 100,
+      seuil_eur = round(seuil / 12),
+      taux      = round(taux, 1),
+      effectif  = round(effectif, 2),
+      intensite = round(intensite, 1),
+      cout_mds  = round(ecart / 1e9, 1)
+    )
+  })
+}
+
+# Affichage ggiraph
+is_html <- knitr::is_html_output()
+
+show_girafe <- function(gg, width_svg = 10, height_svg = 5) {
+  if (is_html) {
+    girafe(
+      ggobj = gg,
+      width_svg = width_svg,
+      height_svg = height_svg,
+      options = list(
+        opts_hover(css = "opacity:0.8;stroke-width:2px;filter:brightness(0.85);cursor:pointer;"),
+        opts_tooltip(css = "background-color:white;color:black;padding:8px;border-radius:4px;font-size:13px;box-shadow:2px 2px 6px rgba(0,0,0,0.3);"),
+        opts_hover_inv(css = "opacity:0.3;"),
+        opts_sizing(rescale = TRUE, width = 1)
+      )
+    )
+  } else {
+    print(gg)
+  }
+}
+
+# ── Fonction gt_cnle ──────────────────────────────────────────────────────────
+# Spanners dynamiques : les noms de colonnes (après rename) sont inspectés pour
+# regrouper automatiquement Seuil | Pauvreté monétaire | Profondeur & coût.
+# fmt_integer/fmt_number utilisent matches() pour correspondre aux noms FR.
+gt_cnle <- function(df, title = NULL, subtitle = NULL) {
+  cn <- colnames(df)
+
+  tbl <- df |>
+    gt() |>
+    tab_header(title = title, subtitle = subtitle) |>
+    tab_source_note(
+      source_note = md(glue::glue("**Source :** ERFS {annee_ref}, INSEE – calculs auteur."))
+    ) |>
+    opt_stylize(style = 1, color = "blue") |>
+    tab_options(
+      table.font.size                   = px(13),
+      table.width                       = pct(100),
+      heading.title.font.size           = px(15),
+      heading.subtitle.font.size        = px(12),
+      heading.align                     = "left",
+      column_labels.font.weight         = "bold",
+      column_labels.background.color    = "#2c7bb6",
+      column_labels.border.bottom.color = "#1a5a8a",
+      column_labels.border.bottom.width = px(2),
+      column_labels.padding             = px(6),
+      table.border.top.color            = "#2c7bb6",
+      table.border.bottom.color         = "#2c7bb6",
+      row.striping.include_table_body   = TRUE,
+      row.striping.background_color     = "#f7fafd",
+      row_group.background.color        = "#2c7bb6",
+      row_group.font.weight             = "bold",
+      row_group.border.top.color        = "#1a5a8a",
+      row_group.border.bottom.color     = "#1a5a8a",
+      source_notes.font.size            = px(11)
+    ) |>
+    # Entiers sans décimale pour les colonnes « Seuil » (% et €/UC)
+    fmt_integer(columns = matches("^Seuil"), sep_mark = " ") |>
+    # 1 décimale pour toutes les autres colonnes numériques
+    fmt_number(
+      columns  = where(is.numeric) & !matches("^Seuil"),
+      decimals = 1, sep_mark = " ", dec_mark = ","
+    ) |>
+    tab_style(
+      style     = cell_text(color = "white", weight = "bold"),
+      locations = cells_column_labels()
+    ) |>
+    tab_style(
+      style = cell_text(color = "white", weight = "bold"),
+      locations = cells_row_groups()
+    ) |>
+    cols_align(align = "center", columns = where(is.numeric)) |>
+    cols_align(align = "left",   columns = where(is.character))
+
+  # ── Spanners dynamiques ───────────────────────────────────────────────────
+  seuil_cols      <- grep("^Seuil",             cn, value = TRUE)
+  pauvrete_cols   <- grep("^(Taux|Effectif)",   cn, value = TRUE)
+  profondeur_cols <- grep("^(Intensité|Coût)", cn, value = TRUE)
+
+  if (length(seuil_cols) >= 2)
+    tbl <- tab_spanner(tbl,
+      label   = md("*Seuil de pauvreté*"),
+      columns = all_of(seuil_cols)
+    )
+  if (length(pauvrete_cols) >= 1)
+    tbl <- tab_spanner(tbl,
+      label   = md("**Pauvreté monétaire**"),
+      columns = all_of(pauvrete_cols)
+    )
+  if (length(profondeur_cols) >= 1)
+    tbl <- tab_spanner(tbl,
+      label   = md("**Profondeur & coût**"),
+      columns = all_of(profondeur_cols)
+    )
+
+  # Texte blanc sur les spanners (fond déjà coloré par opt_stylize)
+  if (length(c(seuil_cols, pauvrete_cols, profondeur_cols)) > 0)
+    tbl <- tab_style(
+      tbl,
+      style     = cell_text(color = "white", weight = "bold", size = px(12)),
+      locations = cells_column_spanners(everything())
+    )
+
+  tbl
+}
+
+seuils_trajectoire <- c(0.40, 0.45, 0.50, 0.55, 0.60)
+annee_ref <- 2023
+```
+
+::: {.callout-note appearance="minimal"}
+**Source :** Enquête Revenus Fiscaux et Sociaux (ERFS), INSEE, millésime `r annee_ref`.
+Les seuils de pauvreté sont exprimés en niveau de vie annuel par unité de consommation ;
+les montants mensuels par UC sont indiqués à titre indicatif.
+Le coût d'éradication (*poverty gap*) correspond au transfert théorique permettant d'amener
+chaque ménage pauvre exactement au seuil, sans comportement endogène ni frais de gestion.
+Les taux et effectifs sont calculés au niveau individuel (proportion d'individus dans des ménages pauvres) ;
+l'intensité et le coût d'éradication au niveau ménage.
+:::
+
+---
+
+# Indicateurs de pauvreté monétaire et coût d'éradication {#sec-indicateurs}
+
+## Population totale
+
+```{r indic-total}
+df_total <- data_all |>
+  filter(annee == annee_ref)
+
+mediane_nationale <- mediane_ponderee(df_total$nivviem, df_total$wprm)
+
+indic_total <- indicateurs_pauvrete(df_total,
+  seuils      = seuils_trajectoire,
+  mediane_pop = mediane_nationale)
+
+# Statistiques clés (commentaires inline)
+i60_tot       <- indic_total |> filter(seuil_pct == 60)
+taux_ref_60   <- i60_tot$taux
+eff_ref_60    <- i60_tot$effectif
+cout_ref_60   <- i60_tot$cout_mds
+int_ref_60    <- i60_tot$intensite
+seuil_eur_60  <- i60_tot$seuil_eur
+
+indic_total |>
+  rename(
+    `Seuil (% médiane)`          = seuil_pct,
+    `Seuil mensuel (€/UC)`       = seuil_eur,
+    `Taux de pauvreté (%)`       = taux,
+    `Effectif (millions)`        = effectif,
+    `Intensité (%)`              = intensite,
+    `Coût d'éradication (Mds €)` = cout_mds
+  ) |>
+  gt_cnle(
+    title    = "Indicateurs de pauvreté monétaire – ensemble de la population",
+    subtitle = glue::glue("France métropolitaine, {annee_ref}")
+  ) |>
+  tab_style(
+    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
+    locations = cells_body(
+      columns = `Intensité (%)`,
+      rows    = `Seuil (% médiane)` %in% c(40, 45, 55)
+    )
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (% médiane)` == 60)
+  ) |>
+  tab_footnote(
+    footnote  = md("L'intensité mesure l'écart moyen entre le niveau de vie des ménages pauvres et le seuil, rapporté à ce dernier. Elle est grisée aux seuils non conventionnels."),
+    locations = cells_column_labels(columns = `Intensité (%)`)
+  )
+```
+
+Au seuil de **60 % de la médiane** — seuil retenu dans les comparaisons européennes et par l'INSEE —, le taux de pauvreté s'élève à **`r taux_ref_60` %** de la population en `r annee_ref`, soit environ **`r eff_ref_60` millions** de personnes vivant dans un ménage dont le niveau de vie mensuel est inférieur à `r format(seuil_eur_60, big.mark = " ")` €/UC. Avec une intensité de `r int_ref_60` %, le coût théorique d'éradication de la pauvreté — montant de transferts ciblés nécessaires pour amener chaque ménage exactement au seuil — atteint **`r cout_ref_60` milliards d'euros**. Les seuils plus bas (40–55 %) identifient un noyau de grande pauvreté nettement plus réduit en effectif, mais dont l'intensité plus élevée traduit un éloignement plus marqué du seuil.
+
+
+## Par composition familiale (sans revenu professionnel) {#sec-typmen-sans}
+
+```{r indic-sans-revpro}
+typmen_niveaux <- c(
+  "Personne seule", "Couple sans enfant",
+  "Couple avec enfant(s)", "Famille monoparentale", "Autre"
+)
+
+# Individus dont le ménage n'a aucun revenu professionnel
+df_sans_revpro <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(
+    acteu_pr %in% c("Chomage", "Inactif") | is.na(acteu_pr),
+    acteu_cj %in% c("Chomage", "Inactif") | is.na(acteu_cj)
+  )
+
+indic_sans <- map_dfr(typmen_niveaux, function(tm) {
+  df_sub <- df_sans_revpro |> filter(typmen == tm)
+  if (nrow(df_sub) < 50) return(NULL)
+  indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
+    mutate(typmen = tm, .before = 1)
+})
+
+# Statistiques clés
+total_sans_60   <- indicateurs_pauvrete(df_sans_revpro, seuils = 0.60, mediane_pop = mediane_nationale)
+taux_sans_60    <- total_sans_60$taux
+eff_sans_60     <- total_sans_60$effectif
+cout_sans_60    <- total_sans_60$cout_mds
+taux_mono_sans  <- indic_sans |>
+  filter(seuil_pct == 60, typmen == "Famille monoparentale") |>
+  pull(taux)
+taux_seul_sans  <- indic_sans |>
+  filter(seuil_pct == 60, typmen == "Personne seule") |>
+  pull(taux)
+
+indic_sans |>
+  rename(
+    `Type de ménage`       = typmen,
+    `Seuil (%)`            = seuil_pct,
+    `Seuil mensuel (€/UC)` = seuil_eur,
+    `Taux (%)`             = taux,
+    `Effectif (M)`         = effectif,
+    `Intensité (%)`        = intensite,
+    `Coût (Mds €)`         = cout_mds
+  ) |>
+  gt_cnle(
+    title    = "Pauvreté des ménages sans revenu professionnel",
+    subtitle = "Par type de ménage"
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (%)` == 60)
+  ) |>
+  tab_style(
+    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
+    locations = cells_body(
+      columns = `Intensité (%)`,
+      rows    = `Seuil (%)` %in% c(40, 45, 55)
+    )
+  )
+```
+
+Les ménages sans aucun revenu professionnel — dont ni la personne de référence ni le/la conjoint·e n'est en emploi — présentent des taux de pauvreté structurellement très élevés, quelle que soit la configuration familiale. Au seuil de 60 %, ce sous-groupe représente **`r eff_sans_60` millions** de personnes pour un coût d'éradication de **`r cout_sans_60` milliards d'euros**. Les familles monoparentales sont la configuration la plus exposée (**`r taux_mono_sans` %** au seuil de 60 %), devant les personnes seules (`r taux_seul_sans` %) ; leur pauvreté reflète la combinaison d'une inactivité ou d'un chômage et d'une charge familiale non partagée.
+
+
+## Par composition familiale (avec revenu professionnel) {#sec-typmen-avec}
+
+```{r indic-avec-revpro}
+# Individus en emploi (niveau individuel, pas seulement la PR)
+df_avec_revpro <- data_all |>
+  filter(annee == annee_ref, acteu_ind == "Emploi")
+
+indic_avec <- map_dfr(typmen_niveaux, function(tm) {
+  df_sub <- df_avec_revpro |> filter(typmen == tm)
+  if (nrow(df_sub) < 50) return(NULL)
+  indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
+    mutate(typmen = tm, .before = 1)
+})
+
+# Statistiques clés
+total_avec_60  <- indicateurs_pauvrete(df_avec_revpro, seuils = 0.60, mediane_pop = mediane_nationale)
+taux_avec_60   <- total_avec_60$taux
+eff_avec_60    <- total_avec_60$effectif
+cout_avec_60   <- total_avec_60$cout_mds
+taux_mono_avec <- indic_avec |>
+  filter(seuil_pct == 60, typmen == "Famille monoparentale") |>
+  pull(taux)
+
+indic_avec |>
+  rename(
+    `Type de ménage`       = typmen,
+    `Seuil (%)`            = seuil_pct,
+    `Seuil mensuel (€/UC)` = seuil_eur,
+    `Taux (%)`             = taux,
+    `Effectif (M)`         = effectif,
+    `Intensité (%)`        = intensite,
+    `Coût (Mds €)`         = cout_mds
+  ) |>
+  gt_cnle(
+    title    = "Pauvreté des ménages avec revenu professionnel (travailleurs pauvres)",
+    subtitle = "Par type de ménage"
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (%)` == 60)
+  ) |>
+  tab_style(
+    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
+    locations = cells_body(
+      columns = `Intensité (%)`,
+      rows    = `Seuil (%)` %in% c(40, 45, 55)
+    )
+  )
+```
+
+Parmi les individus en emploi, **`r taux_avec_60` %** vivent sous le seuil de 60 % de la médiane, soit **`r eff_avec_60` million(s)** de travailleurs pauvres, pour un coût d'éradication estimé à **`r cout_avec_60` milliard(s) d'euros**. Ce phénomène reflète principalement des salaires faibles, du temps partiel subi ou des contrats courts. Les familles monoparentales avec un actif en emploi demeurent surexposées (**`r taux_mono_avec` %**), la charge d'enfant à charge unique amplifiant le risque de pauvreté même en présence d'un revenu du travail.
+
+
+## Travailleurs pauvres : statut d'occupation, PCS, temps de travail et contrat {#sec-tp-detail}
+
+```{r indic-tp-detail}
+# Individus en emploi avec leurs propres caractéristiques
+df_tp <- data_all |>
+  filter(annee == annee_ref, acteu_ind == "Emploi") |>
+  mutate(
+    temps_travail = case_when(
+      tpstrav == 1 ~ "Temps plein",
+      tpstrav == 2 ~ "Temps partiel",
+      TRUE ~ NA_character_
+    )
+  )
+
+# Fonction générique : taux/coût par modalité + ligne Total
+indic_var <- function(df, var, label_var) {
+  niveaux <- sort(na.omit(unique(df[[var]])))
+  lignes <- map_dfr(niveaux, function(niv) {
+    df_sub <- df |> filter(.data[[var]] == niv)
+    if (nrow(df_sub) < 50) return(NULL)
+    indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
+      mutate(variable = label_var, modalite = niv, .before = 1)
+  })
+  df_ok <- df |> filter(!is.na(.data[[var]]))
+  total <- indicateurs_pauvrete(df_ok, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
+    mutate(variable = label_var, modalite = "— Total", .before = 1)
+  bind_rows(lignes, total)
+}
+
+indic_tp_detail <- bind_rows(
+  indic_var(df_tp, "statut_occ",    "Statut d'occupation"),
+  indic_var(df_tp, "pcs_cat",       "PCS"),
+  indic_var(df_tp, "temps_travail", "Temps de travail"),
+  indic_var(df_tp, "type_contrat",  "Type de contrat")
+)
+
+# Statistiques clés
+taux_tpartiel_60 <- indic_tp_detail |>
+  filter(variable == "Temps de travail", modalite == "Temps partiel", seuil_pct == 60) |>
+  pull(taux)
+taux_tplein_60 <- indic_tp_detail |>
+  filter(variable == "Temps de travail", modalite == "Temps plein", seuil_pct == 60) |>
+  pull(taux)
+
+indic_tp_detail |>
+  rename(
+    `Variable`             = variable,
+    `Modalité`             = modalite,
+    `Seuil (%)`            = seuil_pct,
+    `Seuil mensuel (€/UC)` = seuil_eur,
+    `Taux (%)`             = taux,
+    `Effectif (M)`         = effectif,
+    `Intensité (%)`        = intensite,
+    `Coût (Mds €)`         = cout_mds
+  ) |>
+  gt_cnle(
+    title    = "Pauvreté des travailleurs pauvres",
+    subtitle = "Par statut d'occupation, PCS, temps de travail et type de contrat"
+  ) |>
+  tab_row_group(label = "Type de contrat",     rows = Variable == "Type de contrat") |>
+  tab_row_group(label = "Temps de travail",    rows = Variable == "Temps de travail") |>
+  tab_row_group(label = "PCS",                 rows = Variable == "PCS") |>
+  tab_row_group(label = "Statut d'occupation", rows = Variable == "Statut d'occupation") |>
+  cols_hide(Variable) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (%)` == 60)
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#eef4fb"), cell_text(weight = "bold", style = "italic")),
+    locations = cells_body(rows = Modalité == "— Total")
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold", style = "italic")),
+    locations = cells_body(rows = Modalité == "— Total" & `Seuil (%)` == 60)
+  )
+```
+
+La pauvreté parmi les actifs en emploi varie fortement selon les conditions de travail. Au seuil de 60 %, les travailleurs à **temps partiel** affichent un taux de **`r taux_tpartiel_60` %**, contre **`r taux_tplein_60` %** pour ceux à temps plein — un écart qui reflète à la fois des rémunérations plus faibles et une plus grande fréquence du sous-emploi subi. De même, les contrats courts (CDD, intérim) concentrent une pauvreté plus marquée que les CDI, et les ouvriers présentent des taux nettement supérieurs à ceux des cadres.
+
+
+## Allocataires de l'AAH {#sec-aah-indic}
+
+```{r indic-aah}
+df_aah <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(!is.na(prest_precarite_hand) & prest_precarite_hand > 0)
+
+indic_aah <- if (nrow(df_aah) > 50) {
+  indicateurs_pauvrete(df_aah, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
+} else NULL
+
+# Statistiques clés
+i_aah_60    <- if (!is.null(indic_aah)) indic_aah |> filter(seuil_pct == 60) else NULL
+taux_aah_60 <- if (!is.null(i_aah_60)) i_aah_60$taux    else NA_real_
+eff_aah_60  <- if (!is.null(i_aah_60)) i_aah_60$effectif else NA_real_
+cout_aah_60 <- if (!is.null(i_aah_60)) i_aah_60$cout_mds else NA_real_
+
+if (!is.null(indic_aah)) {
+  indic_aah |>
+    rename(
+      `Seuil (%)`            = seuil_pct,
+      `Seuil mensuel (€/UC)` = seuil_eur,
+      `Taux (%)`             = taux,
+      `Effectif (M)`         = effectif,
+      `Intensité (%)`        = intensite,
+      `Coût (Mds €)`         = cout_mds
+    ) |>
+    gt_cnle(title = "Pauvreté des ménages allocataires de l'AAH") |>
+    tab_style(
+      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+      locations = cells_body(rows = `Seuil (%)` == 60)
+    ) |>
+    tab_style(
+      style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
+      locations = cells_body(columns = `Intensité (%)`, rows = `Seuil (%)` %in% c(40, 45, 55))
+    )
+}
+```
+
+Les allocataires de l'Allocation aux adultes handicapés (AAH) présentent un taux de pauvreté structurellement élevé : le montant de la prestation, indexé sur l'évolution du SMIC, reste historiquement inférieur au seuil de pauvreté à 60 %. Au seuil de référence, **`r taux_aah_60` %** des allocataires vivent sous le seuil, soit **`r eff_aah_60` million(s)** de personnes pour un coût d'éradication estimé à **`r cout_aah_60` milliard(s) d'euros**. L'intensité élevée observée reflète un éloignement important du seuil, conséquence directe du différentiel persistant entre le montant de l'AAH et le niveau de vie médian.
+
+
+## Bénéficiaires d'une pension d'invalidité {#sec-inv-indic}
+
+```{r indic-inv}
+df_inv <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(!is.na(csgpidm) & csgpidm > 0)
+
+indic_inv <- if (nrow(df_inv) > 50) {
+  indicateurs_pauvrete(df_inv, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
+} else NULL
+
+# Statistiques clés
+i_inv_60    <- if (!is.null(indic_inv)) indic_inv |> filter(seuil_pct == 60) else NULL
+taux_inv_60 <- if (!is.null(i_inv_60)) i_inv_60$taux     else NA_real_
+eff_inv_60  <- if (!is.null(i_inv_60)) i_inv_60$effectif  else NA_real_
+cout_inv_60 <- if (!is.null(i_inv_60)) i_inv_60$cout_mds  else NA_real_
+
+if (!is.null(indic_inv)) {
+  indic_inv |>
+    rename(
+      `Seuil (%)`            = seuil_pct,
+      `Seuil mensuel (€/UC)` = seuil_eur,
+      `Taux (%)`             = taux,
+      `Effectif (M)`         = effectif,
+      `Intensité (%)`        = intensite,
+      `Coût (Mds €)`         = cout_mds
+    ) |>
+    gt_cnle(
+      title    = "Pauvreté des ménages bénéficiaires d'une pension d'invalidité",
+      subtitle = md("*Proxy : CSG sur pensions d'invalidité > 0*")
+    ) |>
+    tab_style(
+      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+      locations = cells_body(rows = `Seuil (%)` == 60)
+    ) |>
+    tab_style(
+      style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
+      locations = cells_body(columns = `Intensité (%)`, rows = `Seuil (%)` %in% c(40, 45, 55))
+    )
+}
+```
+
+::: {.callout-warning appearance="minimal"}
+**Note :** Les bénéficiaires d'une pension d'invalidité sont identifiés par un proxy (CSG sur pensions d'invalidité > 0) ; ce champ ne couvre pas l'ensemble des pensions de catégorie 1 à 3 et peut inclure quelques faux positifs.
+:::
+
+Les bénéficiaires d'une pension d'invalidité se trouvent fréquemment dans des situations de pauvreté, la pension se substituant partiellement à un revenu d'activité sans en atteindre le niveau. Au seuil de 60 %, le taux de pauvreté de ce sous-groupe s'élève à **`r taux_inv_60` %**, représentant **`r eff_inv_60` million(s)** de personnes et un coût d'éradication de **`r cout_inv_60` milliard(s) d'euros**.
+
+
+## Allocataires du minimum vieillesse {#sec-minvieux}
+
+```{r indic-minvieux}
+df_mv <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(!is.na(prest_precarite_vieil) & prest_precarite_vieil > 0)
+
+indic_mv <- if (nrow(df_mv) > 50) {
+  indicateurs_pauvrete(df_mv, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
+} else NULL
+
+# Statistiques clés
+i_mv_60    <- if (!is.null(indic_mv)) indic_mv |> filter(seuil_pct == 60) else NULL
+taux_mv_60 <- if (!is.null(i_mv_60)) i_mv_60$taux     else NA_real_
+eff_mv_60  <- if (!is.null(i_mv_60)) i_mv_60$effectif  else NA_real_
+cout_mv_60 <- if (!is.null(i_mv_60)) i_mv_60$cout_mds  else NA_real_
+
+if (!is.null(indic_mv)) {
+  indic_mv |>
+    rename(
+      `Seuil (%)`            = seuil_pct,
+      `Seuil mensuel (€/UC)` = seuil_eur,
+      `Taux (%)`             = taux,
+      `Effectif (M)`         = effectif,
+      `Intensité (%)`        = intensite,
+      `Coût (Mds €)`         = cout_mds
+    ) |>
+    gt_cnle(
+      title = "Pauvreté des ménages allocataires du minimum vieillesse (ASPA/ASV)"
+    ) |>
+    tab_style(
+      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+      locations = cells_body(rows = `Seuil (%)` == 60)
+    )
+}
+```
+
+Les allocataires du minimum vieillesse (ASPA/ASV) constituent un sous-groupe dont le revenu est, par construction, au voisinage immédiat du seuil de pauvreté à 50 %. Au seuil de 60 %, le taux de pauvreté s'établit à **`r taux_mv_60` %**, pour un effectif de **`r eff_mv_60` million(s)** de personnes. Le coût d'éradication (**`r cout_mv_60` milliard(s) d'euros**) est relativement contenu au regard du taux, car ces ménages se situent généralement juste en dessous du seuil.
+
+
+---
+
+## Familles monoparentales {#sec-mono}
+
+```{r cout-mono}
+df_mono <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(typmen == "Famille monoparentale")
+
+indic_mono <- indicateurs_pauvrete(df_mono,
+  seuils      = seuils_trajectoire,
+  mediane_pop = mediane_nationale)
+
+# Statistiques clés
+i_mono_60   <- indic_mono |> filter(seuil_pct == 60)
+taux_mono_60  <- i_mono_60$taux
+eff_mono_60   <- i_mono_60$effectif
+cout_mono_60  <- i_mono_60$cout_mds
+int_mono_60   <- i_mono_60$intensite
+
+indic_mono |>
+  rename(
+    `Seuil (%)`                  = seuil_pct,
+    `Seuil mensuel (€/UC)`       = seuil_eur,
+    `Taux (%)`                   = taux,
+    `Effectif (M)`               = effectif,
+    `Intensité (%)`              = intensite,
+    `Coût d'éradication (Mds €)` = cout_mds
+  ) |>
+  gt_cnle(
+    title = "Coût d'éradication – familles monoparentales"
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (%)` == 60)
+  )
+```
+
+Les familles monoparentales figurent parmi les configurations familiales les plus touchées par la pauvreté monétaire. Au seuil de 60 %, **`r taux_mono_60` %** d'entre elles vivent sous le seuil, soit **`r eff_mono_60` million(s)** de personnes (adultes et enfants). Avec une intensité de `r int_mono_60` %, le coût d'éradication s'élève à **`r cout_mono_60` milliard(s) d'euros** — un montant qui illustre l'ampleur du soutien financier nécessaire pour compenser l'absence de second revenu et les charges liées à la garde des enfants.
+
+
+## Ménages avec enfants mineurs {#sec-enfants}
+
+```{r cout-enfants}
+df_enfants <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(typmen %in% c("Couple avec enfant(s)", "Famille monoparentale") |
+           nb_enfants != "0 enfant")
+
+indic_enfants <- indicateurs_pauvrete(df_enfants,
+  seuils      = seuils_trajectoire,
+  mediane_pop = mediane_nationale)
+
+# Statistiques clés
+i_enf_60    <- indic_enfants |> filter(seuil_pct == 60)
+taux_enf_60 <- i_enf_60$taux
+eff_enf_60  <- i_enf_60$effectif
+cout_enf_60 <- i_enf_60$cout_mds
+
+indic_enfants |>
+  rename(
+    `Seuil (%)`                  = seuil_pct,
+    `Seuil mensuel (€/UC)`       = seuil_eur,
+    `Taux (%)`                   = taux,
+    `Effectif (M)`               = effectif,
+    `Intensité (%)`              = intensite,
+    `Coût d'éradication (Mds €)` = cout_mds
+  ) |>
+  gt_cnle(
+    title = "Coût d'éradication – ménages avec enfants mineurs"
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+    locations = cells_body(rows = `Seuil (%)` == 60)
+  )
+```
+
+Les ménages avec enfants mineurs représentent un sous-ensemble large, qui recoupe en partie les familles monoparentales. Au seuil de 60 %, le taux de pauvreté s'élève à **`r taux_enf_60` %**, soit **`r eff_enf_60` millions** de personnes (adultes et enfants confondus). Le coût d'éradication de **`r cout_enf_60` milliards d'euros** est le plus important de tous les sous-groupes analysés, en raison de l'ampleur des effectifs concernés. Ces chiffres rappellent que la pauvreté des enfants reste l'un des défis majeurs des politiques de redistribution.
+
+
+## Seniors ni en emploi ni à la retraite {#sec-seniors}
+
+```{r cout-seniors}
+# PR âgée de 55 ans et +, hors emploi, sans pension de retraite (proxy : csgrstdm == 0)
+df_seniors <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(
+    age_num >= 55,
+    acteu_pr %in% c("Chomage", "Inactif"),
+    is.na(csgrstdm) | csgrstdm == 0
+  )
+
+indic_seniors <- if (nrow(df_seniors) > 50) {
+  indicateurs_pauvrete(df_seniors, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
+} else NULL
+
+# Statistiques clés
+i_sen_60    <- if (!is.null(indic_seniors)) indic_seniors |> filter(seuil_pct == 60) else NULL
+taux_sen_60 <- if (!is.null(i_sen_60)) i_sen_60$taux     else NA_real_
+eff_sen_60  <- if (!is.null(i_sen_60)) i_sen_60$effectif  else NA_real_
+cout_sen_60 <- if (!is.null(i_sen_60)) i_sen_60$cout_mds  else NA_real_
+
+if (!is.null(indic_seniors)) {
+  indic_seniors |>
+    rename(
+      `Seuil (%)`                  = seuil_pct,
+      `Seuil mensuel (€/UC)`       = seuil_eur,
+      `Taux (%)`                   = taux,
+      `Effectif (M)`               = effectif,
+      `Intensité (%)`              = intensite,
+      `Coût d'éradication (Mds €)` = cout_mds
+    ) |>
+    gt_cnle(
+      title = "Coût d'éradication – seniors (55 ans et +) ni en emploi ni à la retraite"
+    ) |>
+    tab_style(
+      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+      locations = cells_body(rows = `Seuil (%)` == 60)
+    )
+}
+```
+
+Les seniors de 55 ans et plus ni en emploi ni à la retraite constituent une « zone grise » du système de protection sociale : trop âgés pour retrouver facilement un emploi, ils n'ont pas encore accès à une pension de retraite et peuvent ne percevoir que des minima sociaux. Au seuil de 60 %, **`r taux_sen_60` %** de ce sous-groupe vit sous le seuil, représentant **`r eff_sen_60` million(s)** de personnes pour un coût d'éradication de **`r cout_sen_60` milliard(s) d'euros**.
+
+
+## Jeunes hors étudiants (18-29 ans) {#sec-jeunes}
+
+```{r cout-jeunes}
+df_jeunes <- data_all |>
+  filter(annee == annee_ref) |>
+  filter(age_num >= 18, age_num <= 29)
+
+indic_jeunes <- if (nrow(df_jeunes) > 50) {
+  indicateurs_pauvrete(df_jeunes, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
+} else NULL
+
+# Statistiques clés
+i_jeu_60    <- if (!is.null(indic_jeunes)) indic_jeunes |> filter(seuil_pct == 60) else NULL
+taux_jeu_60 <- if (!is.null(i_jeu_60)) i_jeu_60$taux     else NA_real_
+eff_jeu_60  <- if (!is.null(i_jeu_60)) i_jeu_60$effectif  else NA_real_
+cout_jeu_60 <- if (!is.null(i_jeu_60)) i_jeu_60$cout_mds  else NA_real_
+
+if (!is.null(indic_jeunes)) {
+  indic_jeunes |>
+    rename(
+      `Seuil (%)`                  = seuil_pct,
+      `Seuil mensuel (€/UC)`       = seuil_eur,
+      `Taux (%)`                   = taux,
+      `Effectif (M)`               = effectif,
+      `Intensité (%)`              = intensite,
+      `Coût d'éradication (Mds €)` = cout_mds
+    ) |>
+    gt_cnle(
+      title    = "Coût d'éradication – jeunes (18-29 ans)",
+      subtitle = md("*Hors étudiants non identifiables dans l'ERFS – résultats à interpréter avec prudence*")
+    ) |>
+    tab_style(
+      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
+      locations = cells_body(rows = `Seuil (%)` == 60)
+    )
+}
+```
+
+::: {.callout-warning appearance="minimal"}
+**Note méthodologique :** L'ERFS ne permet pas d'identifier les étudiants vivant chez leurs parents
+ni les aides parentales non déclarées. Ces résultats ne peuvent pas être produits avec Ines.
+:::
+
+Les 18-29 ans présentent un taux de pauvreté de **`r taux_jeu_60` %** au seuil de 60 %, soit **`r eff_jeu_60` million(s)** de personnes pour un coût d'éradication de **`r cout_jeu_60` milliard(s) d'euros**. Ces chiffres sont à interpréter avec prudence : l'ERFS n'identifie pas les étudiants hébergés chez leurs parents dont les ressources propres sont faibles mais qui bénéficient d'un soutien familial non déclaré. Le taux observé surestime donc probablement la pauvreté « réelle » de cette tranche d'âge au sens des conditions de vie.
+
+
+## Récapitulatif au seuil de 60 % {#sec-recap}
+
+```{r cout-recap-tbl}
+sous_groupes <- list(
+  "Population totale"                     = df_total,
+  "Familles monoparentales"               = df_mono,
+  "Ménages avec enfants mineurs"          = df_enfants,
+  "Allocataires AAH"                      = df_aah,
+  "Bénéficiaires pension d'invalidité"    = df_inv,
+  "Seniors hors emploi/retraite (55+)"   = df_seniors,
+  "Jeunes (18-29 ans)"                   = df_jeunes
+)
+
+recap <- imap_dfr(sous_groupes, function(df, nom) {
+  if (is.null(df) || nrow(df) < 50) return(NULL)
+  indicateurs_pauvrete(df, seuils = 0.60, mediane_pop = mediane_nationale) |>
+    mutate(sous_groupe = nom, .before = 1)
+})
+
+recap |>
+  select(sous_groupe, taux, effectif, intensite, cout_mds) |>
+  rename(
+    `Sous-groupe`                      = sous_groupe,
+    `Taux de pauvreté (%)`             = taux,
+    `Effectif (millions de personnes)` = effectif,
+    `Intensité (%)`                    = intensite,
+    `Coût d'éradication (Mds €)`       = cout_mds
+  ) |>
+  gt_cnle(
+    title    = "Récapitulatif – pauvreté monétaire et coût d'éradication",
+    subtitle = glue::glue("Seuil de 60 % du niveau de vie médian, {annee_ref}")
+  ) |>
+  tab_style(
+    style = list(cell_fill(color = "#eef4fb"), cell_text(weight = "bold")),
+    locations = cells_body(rows = `Sous-groupe` == "Population totale")
+  ) |>
+  tab_footnote(
+    footnote  = md("Taux de référence national, calculé sur l'ensemble de la population."),
+    locations = cells_body(columns = `Taux de pauvreté (%)`, rows = `Sous-groupe` == "Population totale")
+  )
+```
+
+```{r cout-recap-graph}
+#| echo: false
+g_recap <- recap |>
+  filter(sous_groupe != "Population totale") |>
+  mutate(
+    sous_groupe = fct_reorder(sous_groupe, cout_mds),
+    tooltip = paste0(
+      sous_groupe, "\n",
+      "Taux de pauvreté : ", taux, " %\n",
+      "Effectif : ", effectif, " M de personnes\n",
+      "Coût d'éradication : ", cout_mds, " Mds €"
+    ),
+    data_id = paste0("recap_", row_number())
+  ) |>
+  ggplot(aes(x = sous_groupe, y = cout_mds, fill = sous_groupe)) +
+  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id),
+                       width = 0.6, show.legend = FALSE) +
+  geom_text(aes(label = paste0(cout_mds, " Mds €")), hjust = -0.1, size = 3.3) +
+  coord_flip() +
+  scale_fill_manual(values = c(
+    "Familles monoparentales"              = "#d7191c",
+    "Ménages avec enfants mineurs"         = "#f17c00",
+    "Allocataires AAH"                      = "#756bb1",
+    "Bénéficiaires pension d'invalidité"  = "#9e67ab",
+    "Seniors hors emploi/retraite (55+)"  = "#2c7bb6",
+    "Jeunes (18-29 ans)"                  = "#1a9641"
+  )) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.25))) +
+  labs(
+    x = NULL,
+    y = "Coût d'éradication (milliards d'euros courants)",
+    caption = glue::glue("Source : ERFS {annee_ref}, INSEE – calculs auteur. Seuil à 60 % de la médiane.")
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.major.y = element_blank(),
+    plot.caption = element_text(size = 10, color = "grey50"),
+    axis.text = element_text(size = 11)
+  )
+
+show_girafe(g_recap)
+```

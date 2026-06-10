@@ -9,7 +9,7 @@
 if (!exists("synthese")) stop("Lancer reste_a_vivre.R avant ce script.")
 
 # Dossier de sortie (unifié, lowercase)
-graph_path <- "../figure"
+graph_path <- "figure"
 if (!dir.exists(graph_path)) dir.create(graph_path, recursive = TRUE)
 
 # Labels COICOP

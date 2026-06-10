@@ -20,7 +20,7 @@ crossref:
   fig-title: "Graphique"
 lang: fr
 comments:
-  hypothesis: true
+  hypothesis: false
 ---
 
 ```{r setup, include=FALSE}

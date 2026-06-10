@@ -14,7 +14,7 @@
 if (!exists("resultats")) stop("Lancer decomposition_pauvrete.R avant ce script.")
 
 # Dossier de sortie
-dir_graphiques <- "../figure"
+dir_graphiques <- "figure"
 if (!dir.exists(dir_graphiques)) dir.create(dir_graphiques, recursive = TRUE)
 
 # ==============================================================================

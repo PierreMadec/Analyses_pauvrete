@@ -13,3 +13,4 @@ ERFS*/
 **/*.sas7bdat
 **/*.sas
 **/*.RData
+.positai

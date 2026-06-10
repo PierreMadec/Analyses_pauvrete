@@ -449,6 +449,8 @@ construire_base_individus <- function(annee) {
     ppa, m_rsa_actm,
     prest_fam_petite_enfance, prest_fam_autres,
     prest_precarite_rsa, prest_precarite_rmi, prest_precarite_api_rmi,
+    any_of(c("prest_precarite_hand", "prest_precarite_vieil",
+             "csgpidm", "csgrstdm")),
     # Variables ménage harmonisées
     typmen, typmen2, acteu_pr, acteu_cj, biactivite, nb_enfants, statut_occ, groupe,
     # Variables individuelles harmonisées
@@ -690,7 +692,7 @@ cout_pauvrete <- data_all |>
          nb_menages_pauvres_50, nb_menages_pauvres_60,
          cout_par_menage_50, cout_par_menage_60)
 
-saveRDS(cout_pauvrete, file.path("../figure", "cout_pauvrete.rds"))
+saveRDS(cout_pauvrete, file.path("figure", "cout_pauvrete.rds"))
 
 cout_intensite <- data_all |>
   distinct(annee, ident, .keep_all = TRUE) |>
@@ -1223,3 +1225,8 @@ if (any(!is.na(data_all$pcs_cat))) {
 }
 
 cat("\n=== decomposition_pauvrete.R termine ===\n")
+
+# Sauvegarde des objets fondamentaux pour éviter de tout relancer
+saveRDS(data_all,      "figure/data_all.rds")
+saveRDS(seuils_annuels,"figure/seuils_annuels.rds")
+cat("data_all et seuils_annuels sauvegardés dans figure/\n")
