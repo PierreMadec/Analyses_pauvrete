@@ -481,4 +481,72 @@ g_tp2_taux_typmen <- ggplot(taux_tp_typmen,
 saveRDS(g_tp2_taux_typmen, file.path(path_fig, "tp2_taux_typmen.rds"))
 cat("tp2_taux_typmen : ok\n")
 
+# ==============================================================================
+# 10. Type de contrat — travailleurs pauvres vs non pauvres
+#     Variables cdi/cdd/interim disponibles dans type_contrat à partir de 2015.
+# ==============================================================================
+
+annees_contrat <- unique(tp_base_full$annee[
+  !is.na(tp_base_full$type_contrat) & tp_base_full$annee >= 2015
+])
+
+if (length(annees_contrat) >= 2) {
+  # Garder 3 années clés (première, médiane, dernière)
+  annees_contrat_sel <- sort(unique(c(
+    min(annees_contrat),
+    annees_contrat[ceiling(length(annees_contrat) / 2)],
+    max(annees_contrat)
+  )))
+
+  tp_contrat_data <- tp_base_full |>
+    filter(!is.na(type_contrat), annee %in% annees_contrat_sel) |>
+    mutate(
+      groupe = ifelse(pauvre, "Travailleurs pauvres", "Travailleurs non pauvres"),
+      type_contrat = factor(type_contrat,
+        levels = c("CDI", "CDD", "Intérim", "Autre / Inconnu"))
+    ) |>
+    group_by(annee, groupe, type_contrat) |>
+    summarise(poids = sum(wprm, na.rm = TRUE), .groups = "drop") |>
+    group_by(annee, groupe) |>
+    mutate(
+      part    = 100 * poids / sum(poids),
+      tooltip = paste0(type_contrat, " — ", groupe, "\n", annee, " : ", round(part, 1), " %"),
+      data_id = paste0(type_contrat, "_", groupe, "_", annee)
+    ) |>
+    ungroup() |>
+    filter(!is.na(type_contrat))
+
+  pal_contrat <- c(
+    "CDI"              = "#1f78b4",
+    "CDD"              = "#ff7f00",
+    "Intérim"          = "#e31a1c",
+    "Autre / Inconnu"  = "#999999"
+  )
+
+  g_tp2_contrat <- ggplot(
+    tp_contrat_data,
+    aes(x = factor(annee), y = part, fill = type_contrat)
+  ) +
+    geom_col_interactive(
+      aes(tooltip = tooltip, data_id = data_id),
+      position = "stack", width = 0.65
+    ) +
+    facet_wrap(~groupe) +
+    scale_fill_manual(values = pal_contrat, drop = FALSE, na.value = "grey80") +
+    scale_y_continuous(labels = label_number(suffix = " %")) +
+    labs(
+      x       = NULL,
+      y       = "Répartition par type de contrat (%)",
+      fill    = NULL,
+      caption = paste0(caption_base,
+                       "\nVariables cdi/cdd/interim disponibles à partir de 2015.")
+    ) +
+    theme_erfs()
+
+  saveRDS(g_tp2_contrat, file.path(path_fig, "tp2_contrat.rds"))
+  cat("tp2_contrat : ok\n")
+} else {
+  cat("AVERTISSEMENT : type_contrat non disponible — tp2_contrat non créé\n")
+}
+
 cat("\n=== travailleurs_pauvres.R terminé ===\n")

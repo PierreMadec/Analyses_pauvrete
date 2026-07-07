@@ -1,37 +1,39 @@
 ---
-title: "Pourquoi le travail protège-t-il de moins en moins bien de la pauvreté ?"
-subtitle: "Une analyse des travailleurs pauvres à partir des données individuelles de l'ERFS (2005-2023)"
+title: "Travailler sans échapper à la pauvreté : pourquoi le travail protège-t-il de moins en moins ?"
 author:
   - name: "Pierre Madec"
     email: "pierre.madec@ofce.sciences-po.fr"
     affiliation: "OFCE, Sciences Po Paris"
 abstract: |
-  En France, le taux de pauvreté des personnes en emploi a progressé depuis le milieu
-  des années 2010, alors même que le taux d'emploi atteignait des niveaux historiquement
-  élevés. Ce découplage entre emploi et protection contre la pauvreté — le phénomène
-  des « travailleurs pauvres » — s'explique par deux types de mécanismes qu'il convient
-  de distinguer soigneusement : d'un côté, les caractéristiques individuelles du
-  travailleur (temps de travail, type de contrat, qualification) ; de l'autre, la
-  configuration du ménage (nombre de personnes à charge, activité du conjoint, structure
-  familiale). À partir des données individuelles de l'Enquête Revenus Fiscaux et Sociaux
-  (ERFS) de l'INSEE sur la période 2005-2023, cet article montre que si la précarité de
-  l'emploi contribue à la pauvreté laborieuse, c'est avant tout la configuration
-  familiale — et en particulier l'absence de second revenu et la charge d'enfants — qui
-  détermine le basculement sous le seuil. La dimension de genre est au cœur de cette
-  analyse : les femmes sont surreprésentées parmi les travailleurs pauvres, à la fois
-  comme travailleuses précaires et comme cheffe de famille monoparentale. La
-  redistribution atténue partiellement ces inégalités mais ne compense pas la
-  dégradation des conditions d'emploi.
-keywords:
-  - travailleurs pauvres
-  - pauvreté monétaire
-  - ERFS
-  - genre
-  - temps partiel
-  - configuration familiale
+  En France, le taux de pauvreté monétaire a progressé alors même que l'emploi
+  atteignait des niveaux record. Cet article se concentre sur la pauvreté
+  laborieuse et cherche à *expliquer*, configuration de ménage par configuration,
+  pourquoi le travail protège de moins en moins du basculement sous le seuil. À
+  partir des données individuelles de l'ERFS (INSEE, 2005-2023), enrichies des
+  salaires et durées du travail individuels, il établit cinq résultats. D'abord,
+  la pauvreté laborieuse n'augmente qu'au seuil *relatif* : à pouvoir d'achat
+  constant, elle recule (de 8,8 % à 6,4 %). Ensuite, elle est un phénomène de
+  *configuration de ménage* avant d'être un phénomène de bas salaire horaire :
+  environ 95 % des travailleurs pauvres vivent dans un ménage à revenu d'activité
+  unique — 41 % d'entre eux ont pourtant un taux horaire au-dessus du SMIC —, et
+  l'érosion relative tient à la hausse du seuil et à la recomposition de l'emploi,
+  non à une dégradation des conditions. Troisièmement, des simulations
+  contrefactuelles montrent que le levier de sortie diffère radicalement selon la
+  configuration : un emploi à temps plein au SMIC suffirait à sortir près de 90 %
+  des personnes seules pauvres, mais à peine 40 % des familles monoparentales.
+  Quatrièmement, une décomposition complète des transferts révèle que les
+  prestations familiales constituent le premier bouclier des travailleurs pauvres
+  sur toute la période, tandis que la baisse des aides au logement depuis 2017 a
+  partiellement neutralisé les gains de la prime d'activité. Enfin, une lecture
+  par cohorte montre que chaque nouvelle génération de travailleurs s'insère avec
+  un taux de pauvreté laborieuse structurellement plus élevé à même âge, signalant
+  un décrochage générationnel indépendant des seuls effets de structure de ménage.
 citation:
   type: article-journal
   container-title: "Insee Référence"
+  author:
+    - family: Madec
+      given: Pierre
 format:
   html:
     toc: true
@@ -40,6 +42,11 @@ format:
     fig-width: 9
     fig-height: 5.5
     embed-resources: true
+    output-file: "rendu.html"
+execute:
+  error: true
+  warning: false
+  message: false
 bibliography: references.bib
 crossref:
   fig-prefix: "Graphique"
@@ -54,287 +61,522 @@ library(tidyverse)
 
 path_g <- "figure"
 
-# Les figures tp2_*.rds sont produites une seule fois via R/travailleurs_pauvres.R.
-# On ne re-source ce script que si les fichiers n'existent pas encore.
-figures_tp2 <- c("tp2_taux_sexe", "tp2_intensite", "tp2_genre", "tp2_diplome",
-                 "tp2_immi", "tp2_tpspartiel", "tp2_actcj", "tp2_enfants",
-                 "tp2_taux_typmen")
-figures_manquantes <- figures_tp2[
-  !file.exists(file.path("figure", paste0(figures_tp2, ".rds")))
-]
-if (length(figures_manquantes) > 0) {
-  message("Figures manquantes : ", paste(figures_manquantes, collapse = ", "))
-  message("Lancement de travailleurs_pauvres.R (nécessite erfs en mémoire)...")
-  if (!exists("erfs")) erfs <- source("R/charger_erfs.R", local = FALSE)$value
-  source("R/travailleurs_pauvres.R", local = FALSE)
-} else {
-  message("Toutes les figures tp2_* sont disponibles — rendu rapide.")
+if (!exists("data_all")) {
+  data_all       <<- readRDS("figure/data_all.rds")
+  seuils_annuels <<- readRDS("figure/seuils_annuels.rds")
 }
 
-# Détection du format de sortie
-is_html <- knitr::is_html_output()
+backup_existe <- dir.exists("/Users/pierremadec/Documents/ERFS_backup")
 
+# ─── Extractions source (salaires/durées individuels ; PPE) ───────────────────
+if (!file.exists("figure/travailleurs_indiv.rds") && backup_existe) {
+  source("R/extract_travailleurs.R", local = FALSE)
+}
+if (!file.exists("figure/ppe_2005_2015.rds") && backup_existe) {
+  source("R/extract_ppe.R", local = FALSE)
+}
+
+# ─── Partie 1 — Le paradoxe puis mesure de la pauvreté laborieuse ──────────────
+# Figure d'ouverture : déconnexion taux d'emploi / taux de pauvreté
+if (!file.exists("figure/g0_emploi_pauvrete.rds")) {
+  source("R/constat_pauvrete.R", local = FALSE)
+}
+if (!file.exists("figure/pauvrete_rel_anc_trav.rds")) {
+  source("R/pauvrete_relative_ancree.R", local = FALSE)
+}
+# Décrochage relatif (sources du revenu médian) + recul ancré par couche
+figures_decompo <- c("decrochage_sources", "decompo_ancree_couches")
+if (any(!file.exists(file.path("figure", paste0(figures_decompo, ".rds"))))) {
+  source("R/decompo_revenu_tp.R", local = FALSE)
+}
+
+# ─── Partie 2 — Typologie, diagnostic, intensité, genre ───────────────────────
+if (!file.exists("figure/tp3_taux_config.rds")) {
+  source("R/typologie_tp.R", local = FALSE)
+}
+figures_diag <- c("tp_diag_config", "tp_diag_evol", "tp_compo_evol")
+if (any(!file.exists(file.path("figure", paste0(figures_diag, ".rds"))))) {
+  source("R/typologie_travailleurs_pauvres.R", local = FALSE)
+}
+figures_ig <- c("tp_intensite_config", "tp_intensite_evol",
+                "tp_genre_taux", "tp_genre_tempspartiel")
+if (any(!file.exists(file.path("figure", paste0(figures_ig, ".rds"))))) {
+  source("R/intensite_genre_tp.R", local = FALSE)
+}
+
+# ─── Partie 3 — Expliquer l'érosion ───────────────────────────────────────────
+if (!file.exists("figure/tp_contrefactuel.rds")) {
+  source("R/contrefactuels_travailleurs_pauvres.R", local = FALSE)
+}
+figures_oaxaca <- c("oaxaca_tp_barre", "oaxaca_tp_detail",
+                    "oaxaca_tp_coef_detail", "oaxaca_tp_profils")
+if (any(!file.exists(file.path("figure", paste0(figures_oaxaca, ".rds"))))) {
+  source("R/oaxaca_tp.R", local = FALSE)
+}
+if (!file.exists("figure/compo_shift_share_typmen.rds")) {
+  source("R/composition_travailleurs.R", local = FALSE)
+}
+
+# ─── Partie 4 — Ce qui amortit ────────────────────────────────────────────────
+figures_soutien <- c("soutien_effet_amortisseur", "soutien_enveloppe_montant",
+                     "soutien_par_config")
+if (any(!file.exists(file.path("figure", paste0(figures_soutien, ".rds"))))) {
+  source("R/soutien_bas_revenus.R", local = FALSE)
+}
+figures_premium <- c("premium_ame_typmen", "premium_timeline_config")
+if (any(!file.exists(file.path("figure", paste0(figures_premium, ".rds"))))) {
+  source("R/premium_emploi.R", local = FALSE)
+}
+
+# ─── Extensions (pistes 1-6) ──────────────────────────────────────────────────
+if (!file.exists("figure/tp_salaire_horaire_distrib.rds")) {
+  source("R/piste1_salaire_horaire.R", local = FALSE)
+}
+if (!file.exists("figure/cf_calibrage_second_revenu.rds")) {
+  source("R/piste2_calibrage_second_revenu.R", local = FALSE)
+}
+figures_p3 <- c("decompo_transferts_evol", "decompo_transferts_config")
+if (any(!file.exists(file.path("figure", paste0(figures_p3, ".rds"))))) {
+  source("R/piste3_decompo_transferts.R", local = FALSE)
+}
+if (!file.exists("figure/robustesse_seuils.rds")) {
+  source("R/piste4_quasi_pauvres.R", local = FALSE)
+}
+figures_p5 <- c("apl_effet_statut", "prop_pauvres_evol")
+if (any(!file.exists(file.path("figure", paste0(figures_p5, ".rds"))))) {
+  source("R/piste5_apl_locataires.R", local = FALSE)
+}
+figures_p6 <- c("cohortes_jeunes", "cohortes_age_periode")
+if (any(!file.exists(file.path("figure", paste0(figures_p6, ".rds"))))) {
+  source("R/piste6_cohortes.R", local = FALSE)
+}
+
+# ─── Utilitaire d'affichage ───────────────────────────────────────────────────
+is_html <- knitr::is_html_output()
 show_girafe <- function(rds_path, width_svg = 10, height_svg = 5.5) {
   if (!file.exists(rds_path)) {
-    message("Fichier non trouvé : ", rds_path)
-    return(invisible(NULL))
+    message("Fichier non trouvé : ", rds_path); return(invisible(NULL))
   }
   g <- readRDS(rds_path)
   if (is_html) {
-    girafe(
-      ggobj = g,
-      width_svg = width_svg,
-      height_svg = height_svg,
+    girafe(ggobj = g, width_svg = width_svg, height_svg = height_svg,
       options = list(
-        opts_hover(css = "opacity:0.8;stroke-width:2px;filter:brightness(0.85);cursor:pointer;"),
-        opts_tooltip(css = paste0(
-          "background-color:white;color:black;padding:8px;",
-          "border-radius:4px;font-size:13px;",
-          "box-shadow:2px 2px 6px rgba(0,0,0,0.3);"
-        )),
+        opts_hover(css = "opacity:0.8;stroke-width:2px;cursor:pointer;"),
+        opts_tooltip(css = paste0("background-color:white;color:black;padding:8px;",
+          "border-radius:4px;font-size:13px;box-shadow:2px 2px 6px rgba(0,0,0,0.3);")),
         opts_hover_inv(css = "opacity:0.3;"),
-        opts_sizing(rescale = TRUE, width = 1)
-      )
-    )
-  } else {
-    print(g)
-  }
+        opts_sizing(rescale = TRUE, width = 1)))
+  } else print(g)
 }
 ```
 
 # Introduction
 
-Depuis le milieu des années 2010, la France connaît un paradoxe statistique : le taux d'emploi progresse de façon continue, atteignant des niveaux inédits depuis trente ans, tandis que le taux de pauvreté, après une période de stabilité, repart à la hausse. En 2023, on dénombre près de 9,8 millions de personnes vivant sous le seuil de pauvreté à 60 % du revenu médian [@insee_france_portrait_social_2024], soit un niveau record depuis le milieu des années 1990. Parmi ces personnes, une fraction croissante est en emploi.
+La France connaît depuis la fin des années 2010 une situation déroutante : l'emploi progresse fortement, mais la pauvreté monétaire ne recule pas — elle augmente. Un document de travail antérieur [@madec_wp_2025] documente cette dynamique d'ensemble et ses déterminants. Le présent article se concentre sur l'une de ses composantes les plus paradoxales — la **pauvreté laborieuse** — et cherche moins à la décrire qu'à l'**expliquer** : pourquoi le travail, qui demeure la meilleure protection contre la pauvreté, en protège-t-il de moins en moins ?
 
-Ce phénomène — la pauvreté laborieuse, ou « working poverty » — n'est pas nouveau. Il a été documenté de longue date en France [@ponthieux_2006 ; @ponthieux_2009] et à l'échelle européenne [@eurofound_2017]. Ce qui est nouveau, c'est l'acuité du paradoxe : l'emploi, censé être le premier rempart contre la pauvreté, semble de moins en moins remplir cette fonction. La hausse du SMIC, la généralisation de la prime d'activité, la baisse du chômage : ces évolutions favorables n'ont pas suffi à endiguer la progression de la pauvreté laborieuse.
+La notion de travailleur pauvre repose sur une tension méthodologique : la pauvreté se mesure au niveau du **ménage** (le niveau de vie rapporte le revenu disponible au nombre d'unités de consommation), alors que l'emploi est une caractéristique **individuelle**. Un travailleur pauvre n'est donc pas nécessairement un travailleur mal payé : c'est un individu en emploi dont le ménage est pauvre [@ponthieux_2009]. Cette tension ouvre plusieurs routes vers la pauvreté laborieuse : un salaire horaire faible, une durée de travail insuffisante (temps partiel, emploi à durée limitée), l'absence d'un second apporteur de ressources dans le ménage, ou des charges familiales élevées. L'objet de cet article est de **distinguer** ces routes, de mesurer leur poids respectif selon la configuration du ménage, et d'en déduire pour qui — et par quel levier — le travail pourrait de nouveau protéger.
 
-Pour comprendre ce phénomène, il faut distinguer deux registres analytiques que la notion de « travailleur pauvre » tend à mêler. La pauvreté est une caractéristique du *ménage* : elle se mesure en rapportant le revenu disponible du ménage au nombre d'unités de consommation (UC), selon l'échelle d'équivalence de l'OCDE. L'emploi est une caractéristique de *l'individu*. Un travailleur pauvre n'est donc pas nécessairement un travailleur sous-payé — il peut être un salarié en CDI au SMIC, père ou mère d'une famille nombreuse dont le conjoint ou la conjointe est inactif(ve). Inversement, un salarié à temps très partiel dans un ménage bi-actif aisé ne sera pas compté comme travailleur pauvre [@ponthieux_2009].
+L'analyse mobilise les données individuelles de l'ERFS (INSEE, 2005-2023), enrichies pour cet article des **salaires individuels** et des **durées du travail** (temps partiel, sous-emploi) issus des fichiers source. Ces données permettent, au-delà des indicateurs agrégés habituels : de mesurer le **salaire horaire effectif** de chaque travailleur pauvre (depuis 2013, année où la quotité de temps partiel devient disponible) ; de reconstituer le **salaire des conjoints** pour calibrer empiriquement les simulations contrefactuelles ; de décomposer l'effet amortisseur de **l'ensemble des postes de transferts** (aides au logement, prestations familiales, enveloppe activité, minima sociaux) ; et de construire des **pseudo-panels par cohorte** pour mesurer la composante générationnelle de l'érosion. Le champ retenu est celui du **niveau de vie monétaire** ; sauf mention contraire, les analyses portent sur les personnes de référence (PR) en emploi, âgées de 18 à 64 ans, afin de ne pas compter plusieurs fois les membres d'un même ménage.
 
-Cette tension entre unité d'analyse individuelle (l'emploi) et unité de mesure ménage (la pauvreté) est au cœur de cet article. Nous proposons d'y répondre en distinguant systématiquement deux catégories de déterminants : ceux qui relèvent des *conditions d'emploi individuelles* (côté travail) et ceux qui relèvent de la *configuration du ménage* (côté pauvreté). Cette grille de lecture structurée permet de mieux identifier les leviers d'action et d'éviter les faux diagnostics.
+# Partie 1 — Le paradoxe et ce qu'il recouvre vraiment {#sec-mesure}
 
-L'article s'appuie sur les données individuelles de l'Enquête Revenus Fiscaux et Sociaux (ERFS) de l'INSEE, qui couvrent la période 2005-2023. Cette source, construite par appariement entre l'enquête Emploi, les déclarations fiscales et les fichiers de prestations sociales, offre une information détaillée à la fois sur les conditions d'emploi de chaque individu et sur les ressources et la composition du ménage auquel il appartient. Elle permet ainsi de traiter conjointement les deux dimensions du problème.
+## Un découplage inédit entre emploi et pauvreté
 
-# La tension constitutive du travail pauvre : individu versus ménage
-
-## Deux unités d'analyse, une seule mesure
-
-La définition statistique du travailleur pauvre illustre immédiatement la tension inhérente au concept. Conformément à la définition Eurostat retenue en France [@dares_travailleurs_pauvres_2022], nous considérons ici comme travailleur pauvre tout individu qui :
-
-1. est en emploi (salarié ou indépendant), selon la variable d'activité individuelle de l'ERFS (*acteu*) ;
-2. appartient à un ménage dont le niveau de vie — défini comme le revenu disponible divisé par le nombre d'unités de consommation — est inférieur à 60 % du niveau de vie médian de la population.
-
-Cette définition individuelle, plus précise que la définition ancienne centrée sur la personne de référence du ménage, a une conséquence importante : deux individus du même ménage peuvent avoir des statuts différents. Un couple dont l'un est en emploi et l'autre inactif dans un ménage pauvre compte *un* travailleur pauvre et *un* inactif pauvre — et non deux travailleurs pauvres. Cela permet de ne pas attribuer mécaniquement le statut de travailleur à tous les membres d'un ménage dont le chef est en emploi.
-
-## L'asymétrie de genre au cœur du problème de mesure
-
-Cette construction ménage de la pauvreté crée une asymétrie de genre qui mérite d'être soulignée d'emblée. La mesure standard suppose un partage égalitaire des ressources au sein du ménage. Or, une littérature abondante montre que cette hypothèse est discutable : les femmes, en particulier dans les couples à fort différentiel de revenus, peuvent se trouver dans une situation de pauvreté individuelle invisibilisée par la richesse du ménage [@perivier_2016].
-
-À l'inverse, les femmes sont sur-exposées à la pauvreté laborieuse *visible* par deux voies complémentaires. D'une part, elles sont surreprésentées dans l'emploi à temps partiel et dans les contrats précaires, qui génèrent des revenus d'activité insuffisants. D'autre part, elles portent la grande majorité des familles monoparentales, configuration familiale où un emploi — même stable — ne suffit souvent pas à faire passer le ménage au-dessus du seuil.
-
-Cette double exposition est au cœur de l'analyse qui suit.
-
-# Du côté du travail : les caractéristiques individuelles des travailleurs pauvres
-
-## L'évolution de long terme du taux de pauvreté des travailleurs
-
-Le @fig-tp2-taux-sexe retrace l'évolution du taux de pauvreté parmi les individus en emploi sur la période 2005-2023, en distinguant les hommes et les femmes. Deux faits saillants ressortent.
-
-Premier fait : le taux de pauvreté des travailleurs a progressé de façon tendancielle depuis le milieu des années 2010. Après une relative stabilité entre 2005 et 2014 — avec un léger creux lors de la crise de 2008-2009, mécanique du seuil relatif —, il repart à la hausse à partir de 2017-2018 et atteint un niveau record en 2023. Cette progression est cohérente avec la déconnexion croissante observée entre la dynamique de l'emploi et celle de la pauvreté.
-
-Second fait : les femmes ont systématiquement un taux de pauvreté laborieuse plus élevé que les hommes, et cet écart tend à se creuser sur la période récente. Ce différentiel reflète à la fois leur surreprésentation dans les emplois à temps partiel et précaires, et leur rôle dominant dans les familles monoparentales.
+Le point de départ est un paradoxe macroéconomique. Le @fig-emploi-pauvrete superpose, sur la longue période 2005-2023, le taux d'emploi des 18-64 ans et le taux de pauvreté monétaire. Jusqu'au milieu des années 2010, les deux indicateurs évoluent de concert, comme attendu d'une économie en cycle : l'emploi recule et la pauvreté monte avec la crise de 2008-2009, puis se stabilisent. Mais à partir de 2017-2018, les trajectoires **divergent nettement** : l'emploi atteint des niveaux inédits depuis trente ans tandis que la pauvreté repart à la hausse. La relation habituelle — plus d'emploi, moins de pauvreté — semble s'être rompue, et c'est cette déconnexion qui motive l'ensemble de l'article.
 
 ```{r}
-#| label: fig-tp2-taux-sexe
-#| fig-cap: "Taux de pauvreté monétaire parmi les travailleurs (individus en emploi), par sexe (2005-2023). Seuil à 60 % du revenu médian."
+#| label: fig-emploi-pauvrete
+#| fig-cap: "Taux d'emploi (18-64 ans, axe gauche) et taux de pauvreté global (axe droit, seuil à 60 % du revenu médian), 2005-2023. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_taux_sexe.rds"))
+show_girafe(file.path(path_g, "g0_emploi_pauvrete.rds"))
 ```
 
-## La surreprésentation des femmes parmi les travailleurs pauvres
+## La pauvreté laborieuse augmente-t-elle vraiment ?
 
-La composition par genre des travailleurs pauvres révèle un résultat à première vue contre-intuitif (@fig-tp2-genre). Parmi les actifs occupés, les femmes sont légèrement *moins* représentées dans les ménages pauvres que dans les ménages non pauvres. Cet écart, stable sur la période, s'explique par le mécanisme même de la mono-activité : dans les ménages pauvres, la configuration la plus fréquente est celle d'un homme seul à travailler dont le conjoint est inactif. Parmi les actifs occupés de ces ménages, les hommes dominent donc structurellement.
+Avant d'expliquer la hausse de la pauvreté laborieuse, il faut préciser ce que recouvre cette hausse. Le seuil de pauvreté est **relatif** : fixé à 60 % du niveau de vie médian de l'année courante, il s'élève chaque fois que la médiane progresse. Un travailleur peut donc basculer sous le seuil sans que son niveau de vie ait baissé, simplement parce que le reste de la distribution a progressé plus vite que lui.
+
+Le @fig-rel-anc-trav distingue les deux lectures. Mesurée au seuil **relatif**, la pauvreté laborieuse progresse légèrement sur la période (de 8,8 % à 9,8 %). Mais mesurée au seuil **ancré** — le seuil de 2005 porté par l'inflation, à pouvoir d'achat constant —, elle **recule nettement**, de 8,8 % à 6,4 %, et ce recul s'accélère à partir de 2017. En niveau, le travail protège donc *mieux* de la pauvreté en fin de période ; ce n'est qu'en termes *relatifs* — par rapport à un niveau de vie médian qui progresse rapidement — que la protection s'érode. Cette distinction, déjà soulignée pour la pauvreté générale [@madec_wp_2025], est le point de départ : la question n'est pas « pourquoi les travailleurs s'appauvrissent-ils ? » (ils ne s'appauvrissent pas en niveau) mais « pourquoi leurs revenus décrochent-ils du milieu de la distribution ? ».
 
 ```{r}
-#| label: fig-tp2-genre
-#| fig-cap: "Part des femmes parmi les actifs occupés pauvres et non pauvres (2010, 2015, 2019, 2023). En % du groupe."
+#| label: fig-rel-anc-trav
+#| fig-cap: "Taux de pauvreté des personnes en emploi (PR, 18-64 ans) selon le seuil retenu : relatif (60 % de la médiane courante) ou ancré (seuil 2005 porté par l'inflation, pouvoir d'achat constant), 2005-2023. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_genre.rds"))
+show_girafe(file.path(path_g, "pauvrete_rel_anc_trav.rds"))
 ```
 
-Ce résultat ne signifie pas que les femmes sont épargnées par la pauvreté laborieuse — bien au contraire. Il signifie que la pauvreté laborieuse *visible* (celle des actifs occupés dans un ménage pauvre) est une pauvreté majoritairement masculine, tandis que la pauvreté féminine se manifeste davantage sous la forme de l'inactivité contrainte dans un ménage pauvre. C'est l'une des limites de la définition standard du travailleur pauvre : elle ne capture pas la pauvreté de celles et ceux qui voudraient travailler mais ne le peuvent pas, faute de solutions de garde ou de normes de genre défavorables. Par ailleurs, les femmes restent surexposées à la pauvreté laborieuse lorsqu'elles sont cheffes de famille monoparentale — configuration que nous examinons dans la section suivante.
-
-## Le temps partiel subi : un facteur individuel décisif
-
-Parmi les caractéristiques d'emploi, le temps partiel — et plus précisément le temps partiel *subi*, c'est-à-dire non choisi par le salarié — est l'un des déterminants les plus directs de la pauvreté laborieuse. En réduisant le volume de travail et donc le revenu d'activité, sans réduire d'autant le nombre de personnes à charge dans le ménage, il crée mécaniquement un risque de pauvreté accru.
-
-Le @fig-tp2-tpspartiel compare la part des travailleurs à temps partiel parmi les pauvres et les non-pauvres depuis 2015 (date à partir de laquelle les variables correspondantes sont disponibles dans l'ERFS). Le contraste est frappant : les travailleurs pauvres sont massivement plus souvent à temps partiel que les non-pauvres. La tendance est relativement stable sur la période, ce qui suggère que la progression du temps partiel n'est pas en soi une cause nouvelle de la pauvreté laborieuse — elle en est une composante structurelle.
+C'est donc bien à un phénomène *relatif* que l'on a affaire : le travail ne parvient plus à hisser une partie des travailleurs au rythme de la médiane. Mais pourquoi la médiane progresse-t-elle plus vite que le bas ? Le @fig-decrochage-sources apporte un élément de réponse en décomposant la croissance du revenu réel du ménage médian par source. Sur 2005-2023, le revenu **salarial** du ménage médian ne progresse que de 5 % en euros constants, tandis que ses **autres revenus primaires** — pensions de retraite, revenus du capital et des indépendants — bondissent de 30 %. La médiane décroche donc du bas non pas parce que les salaires médians s'envolent, mais parce que la médiane bénéficie de revenus non salariaux que les travailleurs modestes, par définition tributaires de leur seul revenu d'activité, ne possèdent pas. La pauvreté laborieuse relative augmente en partie *malgré* le travail, parce que le travail rémunère moins vite que le patrimoine et les pensions.
 
 ```{r}
-#| label: fig-tp2-tpspartiel
-#| fig-cap: "Part des actifs occupés à temps partiel parmi les pauvres et les non-pauvres (2015, 2017, 2019, 2021, 2023). En % des actifs occupés avec information sur le temps de travail renseignée."
+#| label: fig-decrochage-sources
+#| fig-cap: "Croissance du revenu réel du ménage médian (tranche D45-D55 du niveau de vie) par source, indice base 100 en 2005. Autres revenus primaires : pensions, capital, indépendants. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_tpspartiel.rds"))
+show_girafe(file.path(path_g, "decrochage_sources.rds"))
 ```
 
-Parmi ces temps partiels, une fraction souhaite travailler davantage sans y parvenir — c'est le sous-emploi au sens du BIT. Bien que ce sous-emploi ne soit pas représenté directement sur le graphique, les données de l'ERFS confirment qu'il est particulièrement concentré parmi les travailleurs pauvres. Il constitue la manifestation la plus directe de l'insuffisance quantitative du travail comme source de revenus : ces individus ne sont pas pauvres par choix de travailler moins, mais parce qu'ils ne trouvent pas suffisamment d'heures sur le marché du travail.
+Reste à comprendre *qui* décroche, et *pourquoi* — c'est l'objet des parties suivantes.
 
-## Type de contrat et qualification
+# Partie 2 — Quatre routes vers la pauvreté laborieuse {#sec-typologie}
 
-Le type de contrat de travail constitue un second déterminant individuel important de la pauvreté laborieuse (@fig-tp-contrat, reproduit ici pour comparaison). Les travailleurs pauvres sont surreprésentés parmi les titulaires de contrats à durée déterminée et les intérimaires, qui sont davantage exposés aux interruptions d'emploi et aux périodes de non-rémunération. Ces épisodes de non-emploi réduisent le revenu annuel d'activité sans pour autant ouvrir systématiquement droit à des allocations de chômage suffisantes.
+## Une pauvreté de configuration de ménage
+
+Travailler et rester pauvre n'a pas le même sens selon la situation du ménage, puisqu'un même salaire individuel alimente un, deux ou trois budgets. Le @fig-tp3-taux-config présente le taux de pauvreté des PR en emploi selon une typologie croisant la structure du ménage, l'activité du conjoint et la présence d'enfants. Deux configurations se détachent nettement par leur niveau et leur progression : les familles monoparentales et les couples mono-actifs avec enfants — celles qui cumulent revenu unique et charges familiales. À l'inverse, les couples bi-actifs sans enfant affichent une pauvreté laborieuse quasi nulle.
 
 ```{r}
-#| label: fig-tp-contrat
-#| fig-cap: "Type de contrat des actifs occupés : pauvres vs non pauvres (2015, 2019, 2023). En % des actifs avec contrat renseigné. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp3-taux-config
+#| fig-cap: "Taux de pauvreté des personnes de référence en emploi selon la configuration du ménage (2005-2023). Seuil à 60 % du revenu médian. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "g16_tp_contrat.rds"))
+show_girafe(file.path(path_g, "tp3_taux_config.rds"))
 ```
 
-Il importe toutefois de ne pas surestimer le rôle du contrat. Une part substantielle des travailleurs pauvres est en CDI : la précarité contractuelle n'est pas une condition nécessaire à la pauvreté laborieuse. La qualification professionnelle — mesurée par la catégorie socioprofessionnelle (PCS) — offre une perspective complémentaire (@fig-tp-pcs). Les ouvriers et employés peu qualifiés sont massivement surreprésentés parmi les travailleurs pauvres, mais là encore, il s'agit d'une condition favorisante, pas d'une condition suffisante.
+La composition des travailleurs pauvres confirme ce primat de la structure du ménage (@fig-tp-compo). Tout au long de la période, **les personnes seules et les familles monoparentales représentent à elles seules les deux tiers des travailleurs pauvres**, auxquelles s'ajoutent les couples mono-actifs. Au total, près de **95 % des travailleurs pauvres vivent dans un ménage ne disposant que d'un seul revenu d'activité** : la pauvreté laborieuse n'est presque jamais le fait de couples bi-actifs. C'est le premier résultat structurel de l'article.
 
 ```{r}
-#| label: fig-tp-pcs
-#| fig-cap: "Catégorie socioprofessionnelle de la personne de référence du ménage en emploi : pauvres vs non pauvres (2015, 2019, 2023). En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-compo
+#| fig-cap: "Composition des travailleurs pauvres (PR en emploi) selon la configuration du ménage, 2005-2023, en % de l'ensemble des travailleurs pauvres. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "g17_tp_pcs.rds"))
+show_girafe(file.path(path_g, "tp_compo_evol.rds"))
 ```
 
-## Le niveau de diplôme et l'origine migratoire
+## Le diagnostic : quelle cause domine pour qui ?
 
-Les données de l'ERFS permettent également de caractériser les travailleurs pauvres selon leur niveau de diplôme et leur origine. Le @fig-tp2-diplome met en évidence une forte surreprésentation des personnes sans diplôme ou peu diplômées parmi les travailleurs pauvres. Cette corrélation traduit à la fois les effets directs de la qualification sur le niveau de salaire, et les effets indirects via le type de contrat et le secteur d'emploi. Elle n'est toutefois pas mécanique : de nombreux travailleurs diplômés peuvent se retrouver en situation de pauvreté laborieuse du fait de leur configuration familiale.
+Pour chaque travailleur pauvre, les données enrichies permettent de caractériser les causes proximales du basculement sous le seuil : une **durée de travail** insuffisante (temps partiel, sous-emploi), un **salaire** insuffisant (mesuré en équivalent temps plein, ETP, comparé au SMIC net annuel à temps plein, pour isoler le taux horaire du volume de travail), l'**absence de second revenu**, et la présence d'**enfants à charge**. Le @fig-tp-diag présente, pour chaque configuration, la part des travailleurs pauvres concernés par chacune de ces causes en 2021-2023.
 
 ```{r}
-#| label: fig-tp2-diplome
-#| fig-cap: "Structure par niveau de diplôme des travailleurs pauvres et non pauvres (2010, 2015, 2019, 2023). En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-diag
+#| fig-cap: "Causes proximales de la pauvreté laborieuse par configuration de ménage (2021-2023) : part des travailleurs pauvres concernés par chaque facteur. Salaire ETP = salaire annuel rapporté à un temps plein, comparé au SMIC net annuel temps plein. Source : INSEE, ERFS, calculs de l'auteur."
+#| fig-height: 6.5
 #| echo: false
-show_girafe(file.path(path_g, "tp2_diplome.rds"))
+show_girafe(file.path(path_g, "tp_diag_config.rds"), height_svg = 6.5)
 ```
 
-Les travailleurs immigrés sont, eux aussi, surreprésentés parmi les travailleurs pauvres (@fig-tp2-immi). Cette surreprésentation tient en partie aux caractéristiques individuelles déjà décrites — moindre qualification en moyenne, concentration dans les emplois précaires et à bas salaires — mais aussi à des effets de composition familiale spécifiques : taille des ménages plus grande en moyenne, moindre accès aux dispositifs de solidarité familiale.
+La lecture par configuration révèle des mécanismes nettement distincts :
+
+- **Personne seule** (≈ 31 % des travailleurs pauvres) : la pauvreté est d'origine **individuelle**. Près de 70 % ont un salaire ETP inférieur au SMIC annuel temps plein et le salaire annuel médian n'atteint que ≈ 6 000 € : c'est un déficit de **volume et de rémunération du travail** (temps partiel, emploi sur une fraction de l'année). Sans second adulte dans le ménage, le revenu d'activité individuel est l'unique rempart.
+
+- **Famille monoparentale** (≈ 38 %, le groupe le plus nombreux) : le salaire médian y est pourtant le plus élevé (≈ 14 000 €) et le temps partiel y est moins fréquent. La pauvreté tient ici à la **structure** : un seul revenu pour des enfants à charge. Ce n'est pas une pauvreté de mauvais emploi mais de rapport entre une rémunération et un nombre d'unités de consommation.
+
+- **Couple mono-actif** : la cause dominante est l'**absence de second revenu**, souvent doublée d'un temps partiel élevé (près de la moitié pour les couples sans enfant).
+
+- **Couple bi-actif avec enfants** (≈ 4 %) : deux revenus mais faibles (près de 70 % sous le SMIC ETP) et des charges familiales élevées. C'est le seul cas où le bas salaire au sens strict est central.
+
+## Bas salaire horaire ou insuffisance de durée ? Le rôle du taux horaire
+
+Le diagnostic par configuration distingue la durée de travail du niveau de salaire via le salaire en équivalent temps plein (ETP), mais il reste une mesure agrégée : il dit si le revenu annuel total dépasse ou non le SMIC annuel à temps plein, sans isoler le taux horaire du nombre de semaines travaillées. Les données enrichies permettent d'aller plus loin en calculant directement le **salaire horaire effectif** de chaque travailleur pauvre (disponible depuis 2013 grâce à la quotité de temps partiel). Le @fig-salaire-distrib compare la distribution du ratio salaire horaire / SMIC net entre travailleurs pauvres et non pauvres sur 2013-2023. Elle révèle un résultat contre-intuitif : **41 % des travailleurs pauvres ont un taux horaire au-dessus du SMIC net** — ils ne sont pas pauvres parce que leur salaire horaire est trop faible, mais parce que leur durée de travail ou la structure de leur ménage ne leur permet pas de franchir le seuil. C'est la preuve directe, au niveau individuel, que la pauvreté laborieuse est d'abord un problème de volume de travail et de configuration de ménage.
 
 ```{r}
-#| label: fig-tp2-immi
-#| fig-cap: "Part des travailleurs immigrés parmi les pauvres et les non-pauvres (2010, 2015, 2019, 2023). En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-salaire-distrib
+#| fig-cap: "Distribution du ratio salaire horaire / SMIC net pour les travailleurs en emploi selon leur statut de pauvreté (2013-2023). La ligne verticale marque le SMIC net horaire. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_immi.rds"))
+show_girafe(file.path(path_g, "tp_salaire_horaire_distrib.rds"))
 ```
 
-# Du côté du ménage : la configuration familiale comme déterminant central
-
-## Le type de ménage : structure et évolution
-
-Si les caractéristiques individuelles d'emploi contribuent à la pauvreté laborieuse, la configuration du ménage en est le déterminant souvent le plus décisif. C'est ce que montre le @fig-tp-typmen, qui compare la composition par type de ménage des travailleurs pauvres et non pauvres.
+Cette lecture est toutefois nuancée par l'évolution temporelle (@fig-salaire-evol). La part des travailleurs pauvres dont le taux horaire dépasse le SMIC **a reculé de 51 % en 2013 à 34 % en 2023** : les travailleurs pauvres récents sont relativement plus souvent en-dessous du SMIC horaire que leurs homologues de début de période. Ce mouvement ne contredit pas le résultat principal — la structure du ménage reste dominante — mais il suggère qu'une fraction croissante de la pauvreté laborieuse tient aussi à un déficit de salaire horaire, possiblement lié à la recomposition sectorielle de l'emploi vers des métiers moins qualifiés.
 
 ```{r}
-#| label: fig-tp-typmen
-#| fig-cap: "Composition par type de ménage des ménages dont la personne de référence est en emploi : pauvres vs non pauvres (2015, 2019, 2023). En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-salaire-evol
+#| fig-cap: "Part des travailleurs pauvres dont le salaire horaire dépasse le SMIC net, 2013-2023. Champ : PR en emploi pauvres 18-64 ans avec quotité connue. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "g15_tp_typmen.rds"), height_svg = 5)
+show_girafe(file.path(path_g, "tp_salaire_horaire_evol.rds"))
 ```
 
-Deux configurations émergent comme particulièrement liées à la pauvreté laborieuse : les familles monoparentales et les couples mono-actifs avec enfants. Les premières cumulent revenu unique et charges familiales : sans second apporteur de ressources, même un emploi à temps plein au SMIC peut être insuffisant pour passer au-dessus du seuil. Les secondes illustrent le piège de la mono-activité : la présence d'un enfant supplémentaire augmente le nombre d'UC du ménage sans augmenter les revenus, ce qui fait mécaniquement baisser le niveau de vie.
+## À quelle profondeur ? L'intensité de la pauvreté laborieuse
 
-Le @fig-tp2-taux-typmen illustre l'hétérogénéité des trajectoires de taux de pauvreté selon la configuration familiale : les familles monoparentales ont un taux de pauvreté parmi les travailleurs structurellement plus élevé, et cet écart s'est creusé sur la période récente.
+Le taux de pauvreté ne dit pas *à quelle distance* du seuil se trouvent les travailleurs pauvres. Le @fig-tp-intensite mesure cette intensité — l'écart médian au seuil — par configuration. Le classement diffère nettement de celui des taux. Les **personnes seules** sont de loin les plus profondément sous le seuil (écart médian ≈ 27 %), parce que leur revenu d'activité partiel ou partiel sur l'année les en éloigne fortement. À l'inverse, les **familles monoparentales**, bien que les plus nombreuses, sont les *moins* profondément pauvres (≈ 16 %) : leur revenu d'activité est souvent proche du seuil, qu'un seul salaire ne parvient pas tout à fait à franchir compte tenu des charges. Cette distinction éclaire la suite : pour les personnes seules, la pauvreté est *profonde mais soluble* par un surcroît de travail ; pour les monoparents, elle est *peu profonde mais tenace*, car elle tient à la structure du ménage et non au volume de travail.
 
 ```{r}
-#| label: fig-tp2-taux-typmen
-#| fig-cap: "Taux de pauvreté des travailleurs selon le type de ménage (2005-2023). Seuil à 60 % du revenu médian. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-intensite
+#| fig-cap: "Intensité de la pauvreté laborieuse par configuration : écart relatif médian au seuil, (seuil − niveau de vie) / seuil, en 2021-2023. Champ : PR en emploi pauvres, 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_taux_typmen.rds"))
+show_girafe(file.path(path_g, "tp_intensite_config.rds"))
 ```
 
-## L'activité du conjoint : le déterminant décisif
+## Une pauvreté laborieuse genrée ?
 
-Parmi les caractéristiques du ménage, le statut d'activité du conjoint est peut-être le facteur le plus discriminant. Le @fig-tp2-actcj compare, parmi les personnes de référence en emploi vivant en couple, la répartition selon l'activité de leur conjoint entre ménages pauvres et non pauvres. La différence est saisissante : parmi les travailleurs pauvres vivant en couple, la part dont le conjoint est inactif est nettement plus élevée que parmi les travailleurs non pauvres.
+La mesure de la pauvreté au niveau du ménage entretient un angle mort sur les inégalités de genre [@perivier_2016]. Au niveau individuel, le taux de pauvreté laborieuse n'est paradoxalement *pas* plus élevé pour les femmes que pour les hommes — il serait même légèrement inférieur (@fig-tp-genre-taux). Pourtant, les femmes occupent des emplois bien plus précaires : parmi les actifs occupés, près de **26 % des femmes sont à temps partiel contre 7 % des hommes** (@fig-tp-genre-tp), un écart stable sur toute la période. Cette apparente contradiction tient précisément à la mesure : dans un couple, le faible revenu d'activité d'une femme est « absorbé » par celui de son conjoint et n'apparaît pas comme pauvreté laborieuse, alors même qu'il traduit une dépendance économique. La pauvreté laborieuse féminine ne devient visible que lorsque ce second revenu disparaît — chez les personnes seules et les familles monoparentales, très majoritairement féminines. Le caractère genré de la pauvreté laborieuse est donc en partie masqué par l'unité de mesure, et se loge dans la précarité de l'emploi féminin autant que dans le statut de pauvreté du ménage.
 
 ```{r}
-#| label: fig-tp2-actcj
-#| fig-cap: "Statut d'activité du conjoint des travailleurs pauvres et non pauvres (2010, 2015, 2019, 2023). Restreint aux PR en emploi vivant en couple. En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-genre-taux
+#| fig-cap: "Taux de pauvreté laborieuse au niveau individuel par sexe (actifs occupés, 18-64 ans, 2005-2023). Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_actcj.rds"))
+show_girafe(file.path(path_g, "tp_genre_taux.rds"))
 ```
 
-Ce résultat illustre la polarisation croissante de l'emploi dans les couples. D'un côté, les ménages bi-actifs voient leurs revenus croître avec la participation des deux membres au marché du travail — ce qui les éloigne du seuil de pauvreté, même si chacun gagne individuellement peu. De l'autre, les ménages mono-actifs — souvent contraints par la charge d'enfants en bas âge, le manque de solutions de garde, ou les inégalités de normes sociales — concentrent le risque de pauvreté.
-
-Cette polarisation est profondément genrée. L'inactivité du conjoint concerne prioritairement les femmes : dans les ménages mono-actifs avec enfants, c'est très majoritairement l'homme qui travaille et la femme qui assume la charge des enfants. Lorsque ce ménage est pauvre, c'est lui qui est identifié comme « travailleur pauvre » par les statistiques, mais c'est sa configuration familiale — et non ses seules conditions d'emploi — qui explique le basculement sous le seuil.
-
-## Le nombre d'enfants comme amplificateur
-
-La charge d'enfants interagit directement avec le mécanisme de mesure de la pauvreté : chaque enfant supplémentaire augmente le nombre d'UC du ménage de 0,3 (selon l'échelle OCDE), réduisant d'autant le niveau de vie calculé. Le @fig-tp2-enfants montre que les travailleurs pauvres ont en moyenne des ménages avec davantage d'enfants que les travailleurs non pauvres.
-
 ```{r}
-#| label: fig-tp2-enfants
-#| fig-cap: "Nombre d'enfants dans le ménage des personnes de référence en emploi : pauvres vs non pauvres (2010, 2015, 2019, 2023). En % du groupe. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-genre-tp
+#| fig-cap: "Part des actifs occupés à temps partiel par sexe (18-64 ans, 2005-2023). Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_enfants.rds"))
+show_girafe(file.path(path_g, "tp_genre_tempspartiel.rds"))
 ```
 
-Ce mécanisme arithmétique est distinct de l'effet de précarité : un salarié en CDI au SMIC à temps plein avec trois enfants à charge et un conjoint inactif se trouve mécaniquement sous le seuil de pauvreté, indépendamment de toute fragilité contractuelle. C'est l'une des raisons pour lesquelles les politiques de soutien aux revenus d'activité (SMIC, prime d'activité) sont partiellement inefficaces pour réduire la pauvreté laborieuse : elles ne prennent pas en compte la taille du ménage.
+# Partie 3 — Pourquoi le travail protège de moins en moins {#sec-explication}
 
-## Ressources des ménages travailleurs pauvres : revenus et prestations
+## Ce qui s'est aggravé, ce qui s'est amélioré
 
-La décomposition du niveau de vie moyen des travailleurs pauvres (@fig-tp-decomp) éclaire le rôle complémentaire des prestations sociales. Le revenu primaire — essentiellement les revenus d'activité — constitue la composante dominante. Les prestations sociales s'y ajoutent en complément, avec une composition qui a évolué sur la période : montée en charge de la prime d'activité depuis 2016, érosion des aides au logement depuis 2017, et décrochage en valeur réelle du RSA socle.
+L'érosion *relative* de la protection ne tient pas à une dégradation des conditions de rémunération des travailleurs pauvres : celles-ci sont remarquablement **stables**. Le @fig-tp-evol suit dans le temps les principales causes proximales. Le **temps partiel** progresse modérément jusqu'au milieu des années 2010 (de ≈ 26 % à ≈ 33 %) puis se stabilise. Le **déficit de salaire** en équivalent temps plein — mesurable seulement à partir de 2013, lorsque la quotité de temps partiel devient disponible — reste stable autour de 55 % sans tendance marquée. Surtout, la part vivant dans un ménage à **revenu d'activité unique demeure massive et constante** (≈ 95 %) sur toute la période. Hormis la progression contenue du temps partiel, aucune de ces dimensions ne connaît de dégradation continue : ce qui caractérise la pauvreté laborieuse récente n'est pas une détérioration des conditions d'emploi, mais leur **persistance** sur un socle structurel inchangé — l'insuffisance d'un seul revenu d'activité face aux charges du ménage.
 
 ```{r}
-#| label: fig-tp-decomp
-#| fig-cap: "Décomposition du niveau de vie moyen des ménages pauvres dont la personne de référence est en emploi (2010-2023). En euros courants par UC et par mois. Les flèches indiquent l'écart au seuil de pauvreté. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-evol
+#| fig-cap: "Évolution des causes proximales parmi les travailleurs pauvres, 2005-2023, en % des travailleurs pauvres. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "g14_tp_decomp.rds"), height_svg = 6)
+show_girafe(file.path(path_g, "tp_diag_evol.rds"))
 ```
 
-Malgré la progression nominale des revenus d'activité (portée par les revalorisations du SMIC), l'écart entre le niveau de vie moyen des travailleurs pauvres et le seuil de pauvreté s'est creusé depuis 2020. Cela signifie que les travailleurs pauvres ne sont pas seulement plus nombreux, mais aussi *plus pauvres* en termes relatifs — un phénomène que l'analyse de l'intensité de la pauvreté laborieuse permet de quantifier.
+Si le travail protège « de moins en moins » en termes relatifs, ce n'est donc pas parce que les conditions d'emploi des travailleurs pauvres se seraient globalement dégradées. C'est la conjonction de deux mécanismes : d'une part le niveau de vie médian — donc le seuil — progresse plus vite que les revenus du bas (Partie 1) ; d'autre part la population en emploi s'est recomposée vers des configurations à revenu unique, structurellement exposées, que ni la revalorisation du SMIC ni l'allongement de la durée ne peuvent à elles seules hisser au niveau de la médiane. Une nuance mérite toutefois d'être signalée : si la part des travailleurs pauvres avec un salaire ETP inférieur au SMIC est stable, la part de ceux dont le **taux horaire** dépasse le SMIC a reculé de 51 % à 34 % entre 2013 et 2023, signalant une légère dégradation salariale relative qui vient s'ajouter aux effets de composition. La décomposition qui suit quantifie le mécanisme dominant.
 
-# L'intensité de la pauvreté laborieuse
+## Pour qui le travail peut-il encore protéger ? Des leviers contrastés
 
-La mesure du taux de pauvreté ne rend compte que du nombre de personnes passant sous le seuil, sans dire de combien. L'intensité de la pauvreté — mesurée ici par l'écart moyen entre le niveau de vie des pauvres et le seuil, exprimé en % du seuil — apporte une information complémentaire sur la profondeur de la pauvreté.
-
-Le @fig-tp2-intensite compare l'évolution de cette intensité pour les travailleurs pauvres et pour l'ensemble des pauvres. Deux observations se dégagent.
-
-D'une part, les travailleurs pauvres ont une intensité de pauvreté structurellement inférieure à l'ensemble des pauvres : ils sont plus proches du seuil, en moyenne, que les chômeurs ou les inactifs pauvres. Cela traduit le fait que l'emploi, même insuffisant, reste une ressource qui rapproche du seuil de pauvreté.
-
-D'autre part, cette intensité a progressé de façon marquée depuis 2020 pour les travailleurs pauvres, convergent vers celle de l'ensemble des pauvres. Autrement dit, non seulement l'emploi protège de moins en moins de la pauvreté en termes de taux, mais les travailleurs pauvres se retrouvent aussi de plus en plus loin du seuil — suggérant que le profil des travailleurs pauvres tend à se rapprocher de celui des pauvres les plus vulnérables.
+Ce diagnostic se vérifie par des simulations contrefactuelles. Pour chaque travailleur pauvre, on teste si un levier donné suffirait à faire repasser le ménage au-dessus du seuil : passer à **temps plein** au même taux horaire, accéder à un **temps plein rémunéré au SMIC**, ou voir un **second revenu** (un SMIC) entrer dans le ménage — ce dernier n'étant possible que pour les couples mono-actifs, où un second adulte inactif est présent. Les gains simulés sont pris **nets de la reprise de prime d'activité** (≈ 38 % du gain, plafonnée à la prestation perçue). Le @fig-tp-cf présente la part des travailleurs pauvres de chaque configuration ainsi sortis du seuil. La correction de reprise se révèle de second ordre — les résultats ci-dessous varient d'un point au plus selon qu'on raisonne en brut ou en net —, ce qui montre que les conclusions ne tiennent pas à l'hypothèse de traitement des prestations.
 
 ```{r}
-#| label: fig-tp2-intensite
-#| fig-cap: "Intensité de la pauvreté : écart moyen au seuil (en % du seuil), travailleurs pauvres vs ensemble des pauvres (2005-2023). Seuil à 60 % du revenu médian. Source : INSEE, ERFS, calculs de l'auteur."
+#| label: fig-tp-cf
+#| fig-cap: "Part des travailleurs pauvres sortis de la pauvreté selon le levier simulé, par configuration de ménage (2021-2023). Simulation statique brute (hors reprise de prestations). Le second revenu n'est simulé que pour les couples mono-actifs. Source : INSEE, ERFS, calculs de l'auteur."
 #| echo: false
-show_girafe(file.path(path_g, "tp2_intensite.rds"))
+show_girafe(file.path(path_g, "tp_contrefactuel.rds"))
+```
+
+Les leviers diffèrent radicalement selon la configuration, ce qui constitue le résultat central de l'article :
+
+- Pour les **personnes seules**, un emploi à **temps plein au SMIC suffit dans ≈ 90 % des cas** : leur pauvreté est un problème de volume de travail, soluble par l'emploi.
+- Pour les **familles monoparentales**, même un temps plein au SMIC ne sort que **≈ 40 %** d'entre elles — et aucun second adulte ne peut être activé. Aucun levier d'emploi ne suffit : la sortie passe par la solidarité (transferts) et la levée des contraintes d'activité (modes de garde).
+- Pour les **couples mono-actifs**, l'arrivée d'un **second revenu sort 90 à 93 %** des ménages : la pauvreté y est d'abord une affaire de mono-activité.
+- Pour les **couples bi-actifs avec enfants**, déjà à deux revenus, c'est la montée au temps plein au SMIC qui joue (≈ 67 %).
+
+## L'hypothèse « second revenu » : que dit l'observation ?
+
+Le contrefactuel « second revenu » suppose l'entrée d'un SMIC dans le ménage. Il est possible de tester si cette hypothèse est réaliste en observant les salaires effectifs des conjoints dans les couples *bi-actifs* similaires. Le @fig-calib-second-revenu présente la distribution du ratio salaire du conjoint / SMIC chez les couples bi-actifs proches du seuil (2019-2023). Il apparaît que l'hypothèse +1 SMIC est **conservatrice** : le salaire médian observé chez les seconds apporteurs bi-actifs atteint 1,6 fois le SMIC net annuel, et seulement 25 % gagnent moins d'un SMIC. Simuler +1 SMIC sous-estime donc l'effet du passage à la bi-activité — le taux de sortie de 90-93 % pour les couples mono-actifs serait encore plus élevé avec une distribution empirique. Ce résultat renforce l'interprétation : c'est bien **l'absence du second revenu** et non son niveau potentiel qui explique la pauvreté de ces ménages. À noter que parmi les couples mono-actifs pauvres, le conjoint inactif est **féminin à 85 %**, ce qui situe la mono-activité dans la continuité des inégalités de genre sur le marché du travail.
+
+```{r}
+#| label: fig-calib-second-revenu
+#| fig-cap: "Distribution du ratio salaire du conjoint / SMIC net annuel dans les couples bi-actifs (2019-2023). Ligne rouge : hypothèse contrefactuelle (+1 SMIC) ; ligne orange : médiane observée. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "cf_calibrage_second_revenu.rds"))
+```
+
+## Composition ou rendements ? La lecture Oaxaca
+
+Ces mécanismes se retrouvent dans une décomposition de Oaxaca-Blinder comparant les travailleurs de 2010-2012 à ceux de 2021-2023 (@fig-oaxaca-barre). L'**effet de composition est positif (+0,50 pt)** : la population des travailleurs s'est déplacée vers des profils plus exposés. Mais l'**effet de coefficients est négatif (-0,66 pt)** : à profil identique, les travailleurs sont *moins* pauvres en fin de période — reflet des revalorisations du SMIC et de la montée en charge de la prime d'activité (Partie 4). Le solde net est légèrement négatif. La hausse de la *contribution* des travailleurs à la pauvreté ne traduit donc pas une dégradation à profil donné, mais l'élargissement et la recomposition de la population en emploi.
+
+```{r}
+#| label: fig-oaxaca-barre
+#| fig-cap: "Décomposition Oaxaca-Blinder du taux de pauvreté parmi les travailleurs (PR en emploi). Comparaison 2010-2012 / 2021-2023. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "oaxaca_tp_barre.rds"))
+```
+
+Le détail de l'effet de composition (@fig-oaxaca-detail) confirme le rôle de l'origine migratoire et de la configuration du ménage (davantage de configurations à revenu unique parmi les travailleurs) ; l'âge joue en sens inverse. La recomposition de l'emploi a incorporé des populations structurellement plus exposées — au premier rang desquelles les familles monoparentales, dont le taux d'emploi a fortement progressé.
+
+```{r}
+#| label: fig-oaxaca-detail
+#| fig-cap: "Décomposition de l'effet composition par variable — 2010-2012 / 2021-2023, en points de pourcentage. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "oaxaca_tp_detail.rds"))
+```
+
+## Un décrochage générationnel : chaque cohorte s'insère plus pauvre
+
+L'effet de composition de l'Oaxaca capture la recomposition de la population en emploi entre deux dates, mais une lecture en coupe transversale ne permet pas de distinguer ce qui relève d'un effet de *période* (une dégradation qui touche tous les travailleurs en même temps) de ce qui relève d'un effet de *cohorte* (chaque génération s'insère structurellement dans de moins bonnes conditions que la précédente). Pour y répondre, on construit des pseudo-panels par cohorte quinquennale de naissance : chaque cohorte est suivie sur toutes les années ERFS où elle se trouve dans le champ 18-64 ans, ce qui permet de comparer le taux de pauvreté laborieuse *à même âge* entre générations successives.
+
+Le @fig-cohortes-jeunes présente ce taux à 25-34 ans pour les cohortes nées entre 1970 et 1995 : la hausse est régulière et nette — de 7,5 % pour la cohorte née dans les années 1970 à plus de 10 % pour celle née dans les années 1990. Ce résultat ne peut pas s'expliquer par un seul effet de période (qui produirait un saut à une date donnée, visible pour toutes les cohortes simultanément) : c'est bien une **dégradation structurelle des conditions d'insertion**, cohorte après cohorte. Chaque nouvelle génération de travailleurs commence sa vie active avec un risque de pauvreté laborieuse plus élevé que la précédente au même stade.
+
+```{r}
+#| label: fig-cohortes-jeunes
+#| fig-cap: "Taux de pauvreté laborieuse à 25-34 ans par cohorte de naissance (quinquennale), 2005-2023. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "cohortes_jeunes.rds"))
+```
+
+Ce résultat est cohérent avec le profil âge-pauvreté par période (@fig-age-periode). Entre 2005-2009 et 2020-2023, la hausse est concentrée sur les **35-49 ans** — soit les cohortes des années 1975-1985, précisément celles qui ont connu une insertion précaire dans les années 2000-2010 et dont la position relative ne s'est pas améliorée avec l'avancée en âge. Les travailleurs en fin de carrière (60-64 ans) voient également leur taux progresser, probablement par un effet de sélection : les actifs âgés qui restent en emploi précaire sont plus nombreux à mesure que le taux d'emploi sénior s'élève. À l'inverse, les travailleurs les plus jeunes (25-29 ans) affichent une hausse modérée entre périodes, l'effet cohorte étant ici compensé par la revalorisation du SMIC et la prime d'activité. Ces résultats suggèrent que l'érosion de la protection par le travail tient aussi à une recomposition générationnelle : les cohortes récentes portent une exposition structurellement plus forte, qui s'est sédimentée sur le marché du travail au fil des années 2010.
+
+```{r}
+#| label: fig-age-periode
+#| fig-cap: "Profil âge-pauvreté laborieuse par période (2005-2023). Taux de pauvreté par tranche d'âge quinquennale selon la période d'observation. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "cohortes_age_periode.rds"))
+```
+
+# Partie 4 — Ce qui amortit : le soutien aux bas revenus d'activité {#sec-soutien}
+
+L'effet de coefficients négatif de l'Oaxaca — l'amélioration à profil donné — n'est pas spontané. Le détail de cet effet par variable (@fig-oaxaca-coef-detail) montre que la baisse se concentre sur la configuration du ménage, l'âge et le diplôme : à structure familiale donnée, un travailleur est moins exposé à la pauvreté en fin de période, ce qui pointe vers un mécanisme redistributif ciblé. On peut identifier et quantifier ce mécanisme directement, en retirant séparément chaque poste de transfert du niveau de vie et en mesurant la hausse de pauvreté laborieuse qui en résulte. Cette approche révèle une réalité plus complexe que le seul récit de la prime d'activité : plusieurs boucliers coexistent, avec des intensités et des trajectoires très différentes selon les configurations de ménage et selon les décisions de politique publique.
+
+```{r}
+#| label: fig-oaxaca-coef-detail
+#| fig-cap: "Décomposition de l'effet de coefficients de l'Oaxaca par variable — 2010-2012 / 2021-2023, en points de pourcentage. Une contribution négative signifie qu'à caractéristique donnée, la pauvreté laborieuse a reculé. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "oaxaca_tp_coef_detail.rds"))
+```
+
+## Une enveloppe reconstituée sur vingt ans
+
+Ces bas revenus d'activité ont été soutenus par trois dispositifs successifs formant une enveloppe cohérente, sans recouvrement : la **Prime pour l'emploi** (PPE, crédit d'impôt, 2005-2015), le **RSA activité** (2009-2015), et la **prime d'activité** (2016-2023), qui remplace les deux premiers. Le @fig-soutien-montant retrace les deux faces de cette enveloppe. Il révèle un changement de nature : la PPE était **large mais peu intense** (jusqu'à 41 % des ménages de travailleurs, pour un montant moyen modeste), la prime d'activité est **plus ciblée mais plus généreuse**, ses montants étant nettement rehaussés par la revalorisation de 2019.
+
+```{r}
+#| label: fig-soutien-montant
+#| fig-cap: "Enveloppe de soutien aux bas revenus d'activité (PPE + RSA activité + prime d'activité) : taux de recours et montant annuel moyen par ménage bénéficiaire. Champ : PR en emploi, 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "soutien_enveloppe_montant.rds"))
+```
+
+## Un effet amortisseur qui a doublé
+
+En retirant l'enveloppe du niveau de vie de chaque ménage et en recalculant le taux de pauvreté, on mesure le nombre de points de pauvreté laborieuse **amortis** par ces dispositifs (@fig-soutien-amortisseur). L'effet progresse fortement : d'environ 0,9 point en 2010, il franchit un palier à la création de la prime d'activité (1,4 pt en 2016) puis à sa revalorisation de 2019 (2,0 pts). L'effet protecteur a ainsi **doublé entre 2010 et 2019** — traduction directe, mesurée et datée, de l'effet de coefficients de l'Oaxaca, et explication du recul de la pauvreté laborieuse ancrée établi en Partie 1.
+
+```{r}
+#| label: fig-soutien-amortisseur
+#| fig-cap: "Taux de pauvreté laborieuse observé vs contrefactuel sans l'enveloppe de soutien aux bas revenus d'activité. La zone grisée mesure l'effet amortisseur. Champ : PR en emploi, 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "soutien_effet_amortisseur.rds"))
+```
+
+Cet amortissement est très inégal selon la configuration (@fig-soutien-config). Il est massif pour les couples mono-actifs (jusqu'à près de 6 points pour les couples sans enfant), substantiel pour les personnes seules et les familles monoparentales (≈ 1,5 à 1,8 point), confirmant que la prime d'activité atteint bien les configurations à revenu unique. Mais, conformément au diagnostic de la Partie 3, il ne suffit pas à ramener les familles monoparentales sous la barre : la solidarité par l'activité complète le revenu sans neutraliser la contrainte structurelle d'un seul apporteur pour des enfants.
+
+```{r}
+#| label: fig-soutien-config
+#| fig-cap: "Effet amortisseur de l'enveloppe de soutien aux bas revenus d'activité par configuration de ménage (2021-2023). Champ : PR en emploi, 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "soutien_par_config.rds"))
+```
+
+## Au-delà de l'enveloppe activité : tous les transferts protecteurs
+
+Si l'enveloppe activité (PPE + RSA activité + prime d'activité) a bien vu son effet amortisseur doubler entre 2010 et 2019, elle ne représente qu'une partie de la redistribution qui protège les travailleurs pauvres. Ces derniers bénéficient aussi d'**aides au logement** (63 % en perçoivent) et de **prestations familiales** (48 %). Le @fig-decompo-transferts-evol compare l'effet amortisseur de chaque poste sur la longue période, en le mesurant par retrait indépendant : pour chaque année, on retire le poste considéré du niveau de vie de chaque ménage et on calcule la hausse de pauvreté laborieuse qui en résulterait.
+
+```{r}
+#| label: fig-decompo-transferts-evol
+#| fig-cap: "Effet amortisseur de chaque poste de transferts sur le taux de pauvreté laborieuse, 2005-2023 (retraits indépendants de premier ordre). Champ : PR en emploi 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "decompo_transferts_evol.rds"))
+```
+
+Deux résultats inattendus se dégagent. D'abord, les **prestations familiales ont constitué, sur toute la période, le premier bouclier** des travailleurs pauvres — leur effet amortisseur (≈ 3,7 pts en 2005) a dépassé celui de l'enveloppe activité jusqu'en 2019, date à partir de laquelle les deux postes deviennent comparables. Or leur montant réel n'a pas progressé depuis 2005 : leur effet s'érode légèrement, alors qu'une revalorisation aurait des effets comparables à ceux de la prime d'activité. Ensuite, les **aides au logement ont vu leur protection chuter** de 2,1 pts à 1,3 pt entre 2005 et 2023, sous l'effet des réformes de 2017 (contemporisation et réduction forfaitaire de 5 €). Cette baisse a partiellement **neutralisé les gains de la prime d'activité** pour les ménages locataires : le renforcement d'un bouclier a donc masqué l'érosion d'un autre.
+
+La décomposition par configuration en 2021-2023 (@fig-decompo-transferts-config) révèle des hiérarchies radicalement différentes selon les ménages, avec des implications de politique publique directes. Pour les **familles monoparentales mono-actives** — le groupe le plus exposé —, ce sont les prestations familiales qui amortissent l'essentiel (10,2 pts de taux de pauvreté), loin devant la prime d'activité (4,6 pts) et les APL (3,4 pts) : pour ce groupe, une revalorisation des prestations familiales serait bien plus efficace qu'un renforcement de la prime d'activité. Pour les **personnes seules**, à l'inverse, la prime d'activité et les APL dominent, les prestations familiales étant quasi nulles. Pour les **couples mono-actifs**, c'est la prime d'activité qui joue le rôle principal, conformément à son ciblage sur les ménages à revenu unique.
+
+```{r}
+#| label: fig-decompo-transferts-config
+#| fig-cap: "Effet amortisseur de chaque poste de transferts par configuration de ménage (2021-2023), en points de taux de pauvreté laborieuse. Retraits indépendants de premier ordre. Source : INSEE, ERFS, calculs de l'auteur."
+#| fig-height: 6
+#| echo: false
+show_girafe(file.path(path_g, "decompo_transferts_config.rds"), height_svg = 6)
+```
+
+## La baisse des APL : une contraction silencieuse de la protection
+
+La baisse agrégée de l'effet amortisseur des APL recouvre des situations très différentes selon le statut d'occupation. Le @fig-apl-statut décompose le taux de pauvreté laborieuse entre **locataires** et **propriétaires** en montrant, pour chacun, le taux observé et le taux contrefactuel sans APL. L'écart entre les deux courbes mesure la protection effective. Pour les locataires, cet écart a chuté de 3,7 pts en 2005 à 2,5 pts en 2023 — soit presque un point de protection en moins en vingt ans. Le taux de pauvreté des locataires reste près du double de celui des propriétaires (13,5 % contre 8,3 % en 2023), et cet écart s'est très légèrement creusé sur la période.
+
+Un mouvement complémentaire, apparent dans la composition des travailleurs pauvres (@fig-prop-pauvres), mérite attention : la **part des propriétaires parmi les travailleurs pauvres a progressé**, de 55 % en 2005 à 61 % en 2023. Ce résultat est contre-intuitif au premier abord — les propriétaires ont un taux de pauvreté plus faible — mais il reflète en partie la situation des familles monoparentales qui conservent la propriété du logement lors d'une séparation puis basculent en pauvreté laborieuse faute d'un revenu d'activité suffisant pour couvrir leurs charges. Il pointe aussi une limite de la mesure monétaire : pour ces ménages, la richesse patrimoniale n'est pas capturée par le niveau de vie courant, ce qui fait de la pauvreté laborieuse des propriétaires un indicateur de vulnérabilité de flux, non de stock. Cette nuance est d'autant plus importante que la déconnexion entre revenu et patrimoine — documentée en Partie 1 à travers la progression des revenus non salariaux du ménage médian — est précisément l'un des mécanismes qui fait que le travail protège de moins en moins *relativement*.
+
+```{r}
+#| label: fig-apl-statut
+#| fig-cap: "Taux de pauvreté laborieuse par statut d'occupation (locataire vs propriétaire), observé et contrefactuel sans aides au logement (APL). La ligne pointillée indique le taux sans APL. Source : INSEE, ERFS 2005-2023, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "apl_effet_statut.rds"))
+```
+
+```{r}
+#| label: fig-prop-pauvres
+#| fig-cap: "Composition des travailleurs pauvres par statut d'occupation (locataires et propriétaires), 2005-2023. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "prop_pauvres_evol.rds"))
+```
+
+## Décomposer le recul de la pauvreté laborieuse ancrée
+
+On peut récapituler la contribution de chaque bloc de revenu au recul de la pauvreté laborieuse en niveau (seuil ancré) établi en Partie 1. Le @fig-decompo-couches calcule, chaque année, le taux de pauvreté ancré des travailleurs en ne retenant d'abord que les **revenus d'activité et de marché**, puis en ajoutant l'**enveloppe de soutien aux bas revenus d'activité**, puis l'ensemble du **revenu disponible**. Trois enseignements. D'abord, la pauvreté ancrée sur les seuls revenus de marché recule elle aussi (de 11,9 % à 9,6 %) : les revenus d'activité des travailleurs modestes ont progressé en pouvoir d'achat, sous l'effet notamment du SMIC. Ensuite, l'écart imputable à l'enveloppe d'activité s'élargit nettement sur la période (de 0,3 à plus de 1 point), confirmant la montée en puissance de la prime d'activité. Enfin, les autres transferts (prestations familiales, aides au logement) abaissent le taux d'environ 2 points supplémentaires en cumulé — mais cette enveloppe est loin d'être stable : comme le montre la décomposition détaillée des sections précédentes, les prestations familiales ont légèrement reculé en termes réels tandis que les aides au logement ont perdu près d'un point de protection entre 2015 et 2023. Le recul de la pauvreté laborieuse ancrée combine ainsi une amélioration des revenus d'activité et un renforcement de la prime d'activité, en partie compensé par l'érosion des deux autres boucliers.
+
+```{r}
+#| label: fig-decompo-couches
+#| fig-cap: "Taux de pauvreté laborieuse au seuil ancré, calculé par couche de revenu cumulée : revenus de marché, + enveloppe de soutien à l'activité, + ensemble de la redistribution (revenu disponible). Champ : PR en emploi, 18-64 ans. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "decompo_ancree_couches.rds"))
+```
+
+## La protection conférée par l'emploi, configuration par configuration
+
+Enfin, en estimant chaque année un modèle logistique de la probabilité d'être pauvre dont la variable d'intérêt est le fait d'être en emploi, à profil donné, on mesure le *premium emploi*. Le @fig-premium-typmen montre qu'il est quasi nul pour les personnes seules et les couples sans enfant, mais élevé — et croissant — pour les familles monoparentales et les couples avec enfants, c'est-à-dire les configurations que la prime d'activité cible le plus. Le @fig-premium-timeline en retrace la chronologie : la montée en charge de la prime d'activité (2016) et sa revalorisation (2019) s'y lisent comme un renforcement de la protection pour les configurations à charges familiales.
+
+```{r}
+#| label: fig-premium-typmen
+#| fig-cap: "AME de l'emploi sur la probabilité d'être pauvre selon le type de ménage (années sélectionnées). En points de pourcentage, toutes choses constantes (TCC). Barres : IC à 95 %. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "premium_ame_typmen.rds"))
+```
+
+```{r}
+#| label: fig-premium-timeline
+#| fig-cap: "Évolution continue du premium emploi (AME) par type de ménage (2005-2023). Le ruban représente l'intervalle de confiance à 95 %. Source : INSEE, ERFS, calculs de l'auteur."
+#| fig-height: 5.5
+#| echo: false
+show_girafe(file.path(path_g, "premium_timeline_config.rds"), height_svg = 5.5)
 ```
 
 # Conclusion
 
-L'analyse des données individuelles de l'ERFS sur la période 2005-2023 permet de dépasser le constat agrégé pour identifier les mécanismes à l'œuvre derrière la progression de la pauvreté laborieuse.
+En se concentrant sur la pauvreté laborieuse et en mobilisant les salaires et durées du travail individuels de l'ERFS, cet article aboutit à quatre conclusions.
 
-Du côté des caractéristiques individuelles d'emploi, le temps partiel subi, la précarité contractuelle et le bas niveau de qualification contribuent au risque de pauvreté laborieuse. Ces facteurs sont particulièrement concentrés chez les femmes et les travailleurs immigrés. Mais ils n'expliquent pas à eux seuls la pauvreté des travailleurs.
+**La pauvreté laborieuse ne progresse qu'en termes relatifs.** À pouvoir d'achat constant, elle a reculé (de 8,8 % à 6,4 %). Si le travail « protège de moins en moins », c'est par rapport à un niveau de vie médian qui progresse plus vite que les revenus du bas — un décrochage, non un appauvrissement. Ce décrochage tient en partie à la *nature* du revenu médian : sur la période, c'est le revenu non salarial du ménage médian (pensions, capital) qui progresse — de 30 % en réel, contre 5 % seulement pour son revenu salarial. Le travail rémunère moins vite que le patrimoine et les pensions, et les travailleurs modestes, tributaires de leur seul revenu d'activité, décrochent mécaniquement.
 
-Du côté de la configuration du ménage, la monoparentalité et la mono-activité sont les deux déterminants les plus puissants. Ils agissent par un mécanisme simple : un revenu d'activité unique, même proche du SMIC, ne suffit pas à maintenir un ménage avec enfants au-dessus du seuil de pauvreté. La polarisation croissante de l'emploi dans les couples — davantage de ménages bi-actifs et davantage de mono-actifs — accentue cet effet structurel.
+**C'est une pauvreté de configuration de ménage avant d'être une pauvreté de bas salaire horaire.** Environ 95 % des travailleurs pauvres vivent dans un ménage à revenu d'activité unique, une proportion stable sur toute la période. Les conditions d'emploi (temps partiel, salaire en équivalent temps plein) n'ont pas connu de dégradation marquée ; ce qui demeure, c'est l'insuffisance d'un seul revenu d'activité — souvent à temps partiel — face aux charges du ménage. Le caractère genré du phénomène est largement masqué par la mesure au niveau du ménage : les femmes occupent des emplois bien plus précaires (26 % à temps partiel contre 7 % des hommes), mais leur faible revenu d'activité n'apparaît comme pauvreté laborieuse que lorsqu'il n'est plus adossé à un second revenu — chez les personnes seules et les mères isolées.
 
-La redistribution — prime d'activité, aides au logement, prestations familiales — atténue partiellement ce risque mais ne compense pas l'insuffisance des revenus primaires. Et son efficacité a diminué sur la période récente, notamment en raison de l'érosion des aides au logement et du décrochage du RSA en termes réels.
+**Le levier de sortie diffère radicalement selon la configuration.** Pour les personnes seules, un emploi à temps plein au SMIC suffirait dans près de 90 % des cas : la pauvreté y est soluble par l'emploi. Pour les familles monoparentales, aucun levier d'emploi ne suffit (à peine 40 % avec un temps plein au SMIC, et pas de second adulte à activer) : la sortie relève de la solidarité et des modes de garde. Pour les couples mono-actifs, c'est le second revenu qui est décisif. Une politique uniforme de la pauvreté laborieuse est donc vouée à l'échec : les instruments doivent être différenciés par configuration.
 
-Ce diagnostic appelle des politiques différenciées. Pour les travailleurs dont la pauvreté est d'abord liée aux conditions d'emploi, des mesures visant à réduire le temps partiel subi et à améliorer l'accès aux contrats stables sont pertinentes. Pour ceux dont la pauvreté est d'abord une affaire de configuration familiale, c'est la politique familiale — et notamment le soutien aux modes de garde pour permettre la bi-activité — qui constitue le levier principal. Les deux logiques doivent être menées conjointement, sans quoi le paradoxe entre hausse de l'emploi et hausse de la pauvreté laborieuse risque de se perpétuer.
+**Le soutien aux bas revenus d'activité a joué, et de plus en plus — mais il n'est qu'un bouclier parmi d'autres.** L'enveloppe PPE + RSA activité + prime d'activité a vu son effet amortisseur doubler entre 2010 et 2019, expliquant le recul de la pauvreté laborieuse ancrée. Mais une décomposition complète des transferts révèle que les **prestations familiales constituent le premier bouclier des travailleurs pauvres** sur toute la période (≈ 3 à 4 pts d'amortissement), en particulier pour les familles monoparentales où elles amortissent plus de 10 pts de pauvreté. Dans le même temps, la **réduction des aides au logement depuis 2017** a partiellement neutralisé les gains de la prime d'activité pour les ménages locataires, dont l'effet APL est passé de 3,7 pts à 2,5 pts entre 2005 et 2023.
+
+**Un décrochage générationnel s'ajoute aux effets structurels.** L'analyse en pseudo-panel par cohorte révèle que chaque nouvelle génération de travailleurs s'insère avec un taux de pauvreté laborieuse plus élevé à même âge — de 7,5 % pour la cohorte née dans les années 1970 à plus de 10 % pour celle née dans les années 1990. Ce mouvement est indépendant des effets de structure de ménage : il pointe vers des conditions d'insertion dégradées et une protection par l'emploi qui s'affaiblit génération après génération.
+
+Le double levier — soutien au revenu d'activité *et* accès à un second revenu (modes de garde, bi-activité) — reste la condition centrale pour que le travail protège non plus seulement en niveau, mais aussi relativement. À cela s'ajoutent la revalorisation des prestations familiales pour les monoparents et le maintien des aides au logement pour les locataires — deux boucliers que les réformes récentes ont fragilisés précisément pour les configurations les plus exposées.
 
 # Annexe méthodologique {.appendix}
 
-## Sources de données
+## Sources et champ
 
-L'Enquête Revenus Fiscaux et Sociaux (ERFS) est produite annuellement par l'INSEE par appariement entre l'enquête Emploi en continu, les fichiers de la direction générale des Finances publiques (DGFIP) et les données des caisses de prestations sociales (CAF, MSA, Pôle emploi). Elle couvre la France métropolitaine. Les données exploitées couvrent la période 2005-2023.
+L'Enquête Revenus Fiscaux et Sociaux (ERFS, INSEE) apparie l'enquête Emploi, les fichiers fiscaux (DGFiP) et les données de prestations (CAF, MSA, France Travail). Les analyses portent sur la France métropolitaine, 2005-2023. Le champ est celui du niveau de vie monétaire (revenu disponible rapporté aux unités de consommation, échelle OCDE modifiée). Sauf mention contraire, les travailleurs sont les personnes de référence en emploi (*acteu*), âgées de 18 à 64 ans.
 
-L'ERFS permet de disposer à la fois :
-- de variables individuelles détaillées sur le statut d'activité, le type de contrat, le temps de travail, le niveau de diplôme, l'âge et le sexe ;
-- de variables ménage sur les revenus disponibles, les prestations sociales par catégorie, la composition familiale et le nombre d'unités de consommation.
+## Variables individuelles enrichies
 
-## Définition du travailleur pauvre
+Aux variables de `data_all` (niveau de vie, configuration de ménage, prestations) sont ajoutées, par extraction des fichiers source individus, le **salaire annuel individuel** (`salaires_i`, 2005-2023), le **temps partiel** (`tppred`, 2005-2023) et sa **quotité** (`txtppred`, 2013-2023), le **sous-emploi** (`sousempl`/`sousemplr`) et le lien au conjoint (`noicon`). Le salaire en équivalent temps plein (ETP) reconstitue le salaire d'un temps partiel à sa quotité ; comparé au SMIC net annuel temps plein, il distingue le déficit de taux horaire du déficit de durée. La mesure « salaire ETP \< SMIC » capture conjointement un faible taux horaire et un emploi sur une fraction de l'année (la quotité corrige le temps partiel, non le nombre de semaines travaillées).
 
-Un individu est défini comme *travailleur pauvre* si : (1) son activité individuelle est « en emploi » (salarié ou non-salarié), selon la variable *acteu* de la base individus de l'ERFS ; (2) le niveau de vie de son ménage — revenu disponible divisé par le nombre d'UC selon l'échelle OCDE modifiée — est inférieur à 60 % du niveau de vie médian de la population, calculé sur l'ensemble des ménages de France métropolitaine.
+## Seuils relatif et ancré
 
-Cette définition individuelle diffère de la définition historique fondée sur le statut de la personne de référence du ménage. Elle permet d'éviter d'attribuer le statut de travailleur à tous les membres d'un ménage dont le chef est en emploi, et de distinguer plus finement les situations au sein d'un même ménage.
+Le seuil relatif vaut 60 % de la médiane de niveau de vie de l'année. Le seuil ancré est le seuil de 2005 porté par l'indice des prix à la consommation, représentant un niveau de vie réel constant.
 
-## Unités de consommation
+## Intensité de la pauvreté
 
-L'échelle d'équivalence de l'OCDE modifiée attribue 1 UC au premier adulte du ménage, 0,5 UC aux autres personnes de 14 ans ou plus, et 0,3 UC aux enfants de moins de 14 ans. Cette pondération est celle utilisée par l'INSEE et Eurostat pour le calcul officiel du niveau de vie et du taux de pauvreté.
+L'intensité est mesurée par l'écart relatif médian au seuil parmi les travailleurs pauvres : $(\text{seuil} - \text{niveau de vie}) / \text{seuil}$, exprimé en %. Champ identique au reste de l'article (PR en emploi pauvres, 18-64 ans).
 
-## Traitement des ruptures de séries
+## Pauvreté laborieuse genrée (niveau individuel)
 
-L'ERFS a connu plusieurs révisions méthodologiques sur la période 2005-2023. Les variables de type de contrat (CDD/CDI/intérim) n'ont pas une forme harmonisée sur l'ensemble de la période : la variable *contra* (disponible dans le fichier IRF de 2015 à 2020) est construite différemment des variables *cdd*, *cdi* et *interim* disponibles à partir de 2023. Les analyses portant sur le type de contrat sont donc restreintes aux années où ces variables sont disponibles de façon cohérente (à partir de 2015). De même, les variables de temps partiel (*tpstrav*) et de sous-emploi (*sousemplr*) ne sont disponibles qu'à partir de 2015.
+La dimension de genre est analysée au niveau **individuel** (tous les actifs occupés, et non les seules personnes de référence), car la restriction aux PR — souvent l'homme dans les couples — biaiserait la comparaison. Le taux individuel rapporte les actifs occupés vivant dans un ménage pauvre à l'ensemble des actifs occupés de chaque sexe. Les coupes par type de ménage ne sont pas reprises ici : la catégorie « famille monoparentale » désignant tout parent isolé avec enfant cohabitant *de tout âge*, elle ne recouvre pas la seule figure de la mère de jeunes enfants et mêlerait des rôles hétérogènes (parents, enfants adultes cohabitants).
+
+## Simulations contrefactuelles
+
+Pour chaque travailleur pauvre, on simule trois leviers et l'on teste le franchissement du seuil : (A) passage à temps plein au taux horaire courant ; (B) temps plein au SMIC ; (C) ajout d'un second revenu d'un SMIC, restreint aux couples mono-actifs (présence d'un second adulte inactif). Le gain salarial est ajouté au revenu disponible, **net de la reprise de la prime d'activité** : la PPA est diminuée de 38 % du gain d'activité, dans la limite du montant effectivement perçu (la prestation ne pouvant devenir négative). Les autres interactions socio-fiscales (aides au logement notamment) ne sont pas modélisées ; les taux de sortie présentés restent donc de légères bornes hautes, mais l'écart au brut est de second ordre (au plus un point).
+
+## Décomposition du recul de la pauvreté ancrée et du décrochage relatif
+
+Le recul de la pauvreté laborieuse ancrée est décomposé par couches de revenu cumulées : taux de pauvreté (seuil ancré) calculé sur les revenus de marché (`rev_avant_redist`), puis augmentés de l'enveloppe de soutien à l'activité, puis du reste de la redistribution (revenu disponible). Le décrochage relatif est analysé en décomposant le revenu réel par unité de consommation du ménage médian (tranche D45-D55 du niveau de vie) en salaires (somme des `salaires_i` du ménage) et autres revenus primaires (`rev_avant_redist` − salaires : pensions, capital, revenus des indépendants), chaque composante étant déflatée par l'IPC et indexée en base 100 (2005).
+
+## Décomposition Oaxaca-Blinder
+
+La décomposition compare les travailleurs (PR en emploi, 18-64 ans) de 2010-2012 et de 2021-2023, par un modèle de probabilité linéaire pondéré à **deux voies avec coefficients poolés** (Cotton-Reimers-Fortin) : effet de composition $(\bar{X}_2 - \bar{X}_1)'\hat{\beta}_{pool}$ et effet de coefficients par solde, sommant exactement à la variation observée.
+
+## Enveloppe de soutien aux bas revenus d'activité
+
+L'enveloppe agrège par ménage la PPE (`ppe`, extraite des fichiers source, 2005-2015), le RSA activité (`m_rsa_actm`, 2009-2015) et la prime d'activité (`ppa`, 2016-2023), sans recouvrement temporel. Le contrefactuel retire l'enveloppe (rapportée aux UC) du niveau de vie et recalcule le taux de pauvreté ; l'écart au taux observé mesure l'effet amortisseur (statique, de premier ordre).
+
+## Premium emploi
+
+Estimé sur les PR (une observation par ménage) par un logit annuel pondéré de l'indicateur de pauvreté sur un indicateur d'emploi et des covariables (âge, sexe, origine, diplôme, type de ménage, enfants). L'AME est obtenu par prédictions contrefactuelles et son intervalle de confiance par la méthode delta.
+
+## Robustesse : seuils alternatifs et quasi-pauvres
+
+Le choix du seuil à 60 % de la médiane est la convention européenne, mais les résultats sont-ils sensibles à ce choix ? Le @fig-robustesse-seuils présente le taux de pauvreté laborieuse aux seuils à 50 %, 60 % et 70 % de la médiane, ainsi que le taux de quasi-pauvreté (zone 100-120 % du seuil). Les tendances sont convergentes aux trois seuils : hausse sur la période et recul partiel après 2021. Le seuil à 70 % produit un niveau naturellement plus élevé, mais la dynamique reste identique. Le taux de quasi-pauvres (7-8 %) est stable sur toute la période, sans signal d'aggravation particulière à court terme : les travailleurs situés juste au-dessus du seuil ne se sont pas rapprochés de celui-ci au fil du temps (distance médiane stable à ≈ 10 % du seuil).
+
+```{r}
+#| label: fig-robustesse-seuils
+#| fig-cap: "Taux de pauvreté laborieuse aux seuils à 50 %, 60 % et 70 % de la médiane, et taux de quasi-pauvres (100-120 % du seuil), 2005-2023. Source : INSEE, ERFS, calculs de l'auteur."
+#| echo: false
+show_girafe(file.path(path_g, "robustesse_seuils.rds"))
+```
 
 ## Références
 
