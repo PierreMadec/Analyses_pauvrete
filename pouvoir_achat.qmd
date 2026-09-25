@@ -1,0 +1,92 @@
+---
+title: "Le pouvoir d'achat des ménages : reconstruction et décomposition"
+author:
+  - name: "Pierre Madec"
+    email: "pierre.madec@ofce.sciences-po.fr"
+    affiliation: "OFCE, Sciences Po Paris"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    fig-width: 10
+    fig-height: 6
+    embed-resources: true
+execute:
+  error: true
+  warning: false
+  message: false
+lang: fr
+---
+
+```{r setup, include=FALSE}
+library(ggiraph)
+library(ggplot2)
+library(tidyverse)
+
+path_g <- "figure"
+
+if (!file.exists("figure/pa_annuel.rds") || !file.exists("figure/pa_trimestriel.rds")) {
+  source("R/pouvoir_achat_menages.R", local = FALSE)
+}
+
+is_html <- knitr::is_html_output()
+show_girafe <- function(rds_path, width_svg = 10, height_svg = 6) {
+  if (!file.exists(rds_path)) {
+    message("Fichier non trouvé : ", rds_path); return(invisible(NULL))
+  }
+  g <- readRDS(rds_path)
+  if (is_html) {
+    girafe(ggobj = g, width_svg = width_svg, height_svg = height_svg,
+      options = list(
+        opts_hover(css = "opacity:0.8;stroke-width:2px;cursor:pointer;"),
+        opts_tooltip(css = paste0("background-color:white;color:black;padding:8px;",
+          "border-radius:4px;font-size:13px;box-shadow:2px 2px 6px rgba(0,0,0,0.3);")),
+        opts_hover_inv(css = "opacity:0.3;"),
+        opts_sizing(rescale = TRUE, width = 1)))
+  } else print(g)
+}
+```
+
+# Objet
+
+Ce document reconstitue, à partir des comptes nationaux trimestriels de l'INSEE (compte de revenu des ménages, base 2020), une série annuelle et trimestrielle de l'évolution du pouvoir d'achat des ménages : le niveau et la contribution de chaque composante du revenu disponible brut (RDB), le pouvoir d'achat total et par unité de consommation (UC), et une estimation du niveau en euros par ménage et par UC. Le code source est dans `R/pouvoir_achat_menages.R` ; les tables produites sont dans `data/insee_pouvoir_achat/pouvoir_achat_annuel.csv` et `..._trimestriel.csv`.
+
+# Décomposition de l'évolution du pouvoir d'achat
+
+Le @fig-decompo-annuelle décompose la croissance annuelle du pouvoir d'achat du RDB des ménages en contributions des grandes masses du compte des ménages — salaires bruts, excédent brut d'exploitation et revenu mixte des entrepreneurs individuels, revenus de la propriété (intérêts et dividendes nets), prestations sociales, cotisations sociales, impôts sur le revenu et le patrimoine — et d'un effet prix (déflateur de la consommation). La ligne noire est le taux de croissance officiel publié par l'INSEE ; l'écart avec la somme des contributions est le résidu de linéarisation usuel de ce type de décomposition (inférieur à 0,1 point).
+
+```{r}
+#| label: fig-decompo-annuelle
+#| fig-cap: "Contribution des composantes du RDB à l'évolution du pouvoir d'achat des ménages. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa1_decomposition_annuelle.rds"))
+```
+
+Le @fig-decompo-trim reprend le même exercice au niveau trimestriel, sur les deux dernières années, pour un suivi conjoncturel.
+
+```{r}
+#| label: fig-decompo-trim
+#| fig-cap: "Contribution des composantes du RDB à l'évolution trimestrielle du pouvoir d'achat, huit derniers trimestres. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa3_decomposition_trim.rds"))
+```
+
+# Le RDB en euros, par ménage et par unité de consommation
+
+Le @fig-euros-menage-uc rapporte le RDB nominal (en euros courants et en euros constants de l'année la plus récente disponible) au nombre de ménages, d'une part, et au nombre d'unités de consommation, d'autre part.
+
+```{r}
+#| label: fig-euros-menage-uc
+#| fig-cap: "Revenu disponible brut par ménage et par unité de consommation, euros courants et euros constants. Source : Insee, comptes nationaux, base 2020, calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa2_euros_menage_uc.rds"))
+```
+
+## Méthodologie et limites
+
+- Le RDB, sa décomposition en composantes et les taux de croissance officiels du pouvoir d'achat (total, par personne, par ménage, par UC) sont des séries INSEE exactes, sans retraitement.
+- Le **nombre de ménages** en niveau est ancré sur les recensements de la population (1999, 2006, 2011, 2016) puis chaîné à l'aide du taux de croissance officiel INSEE de la série "Nombre de ménages" des comptes nationaux. Le contrôle de cohérence (affiché en sortie du script R) montre un écart inférieur à 0,05 % entre le chaînage et les benchmarks de recensement sur 1999-2016 : le "euros par ménage" qui en résulte est donc fiable.
+- Le **nombre d'unités de consommation** en niveau n'est pas publié par l'INSEE (seul son taux de croissance annuel l'est). Il est ici *estimé* à partir de la structure des ménages par type au recensement 2016 (personnes seules, couples, familles monoparentales, ménages complexes) et de l'échelle d'équivalence OCDE modifiée (1 UC pour le premier adulte, 0,5 pour les autres personnes de 14 ans ou plus, 0,3 pour les enfants de moins de 14 ans) — cf. `data/insee_pouvoir_achat/uc_par_type_menage_2016.csv` pour le détail du calcul —, puis chaîné avec le taux de croissance officiel INSEE. Le **"euros par UC" est donc une estimation** (ordre de grandeur, incertitude de l'ordre de ± 5 à 10 %), à la différence du "euros par ménage". Le taux de croissance du pouvoir d'achat par UC, lui, reste la série officielle exacte et n'est pas affecté par cette approximation.
+
+Champ : France, ménages y compris entrepreneurs individuels. Sources : Insee, comptes nationaux trimestriels et annuels (base 2020) ; recensements de la population 1999-2016.

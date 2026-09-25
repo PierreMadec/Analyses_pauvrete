@@ -1,0 +1,7 @@
+type_menage,nb_menages_milliers,part_avec_enfants_mineurs,uc_estime_avec_mineurs,uc_estime_sans_mineurs,note
+homme_seul,4496.411,0,1.0,1.0,"1 UC (seuil OCDE modifiee : 1er adulte = 1)"
+femme_seule,5957.804,0,1.0,1.0,"1 UC"
+couple_sans_enfant,7447.77,0,1.5,1.5,"1 + 0.5 (2e adulte)"
+couple_avec_enfants,7394.79,0.8121,2.027,2.0,"mineurs: 1+0.5+0.3*1.7558 enfants moyens ; sans mineurs (enfants majeurs) : 1+0.5+0.5 (1 enfant majeur suppose)"
+famille_monoparentale,2639.96,0.6331,1.527,1.5,"mineurs: 1+0.3*1.7558 ; sans mineurs : 1+0.5 (1 enfant majeur suppose)"
+menages_complexes,1299.204,0.2563,2.027,2.0,"menages a generations/adultes multiples : hypothese 2 adultes + enfants (approx grossiere)"
