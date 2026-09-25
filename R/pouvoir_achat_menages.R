@@ -488,14 +488,18 @@ g3 <- g3_data |>
 #
 # ATTENTION : l'IPC (indice des prix à la consommation) n'est pas exactement
 # le déflateur de la consommation des comptes nationaux utilisé pour
-# "contrib_prix" (concepts proches mais pas identiques), et les pondérations
-# utilisées ici sont celles de 2026 seules, appliquées à tout l'historique
-# (elles évoluent en réalité chaque année). Pour rester cohérent avec le
-# reste de la décomposition, la contribution brute de chaque fonction
-# (poids x évolution trimestrielle) est donc RECALÉE proportionnellement pour
-# que la somme des 5 postes reproduise exactement "contrib_prix" (déflateur)
-# à chaque trimestre : seule la répartition *relative* entre fonctions est
-# donc estimée à partir de l'IPC, pas le total de l'effet prix.
+# "contrib_prix" (concepts proches mais pas identiques : champ, traitement du
+# logement, pondérations), et les pondérations utilisées ici sont celles de
+# 2026 seules, appliquées à tout l'historique (elles évoluent en réalité
+# chaque année). Les 5 contributions IPC sont affichées TELLES QUELLES (poids
+# x évolution trimestrielle, sans recalage) : un essai initial de recalage
+# proportionnel pour forcer leur somme à égaler "contrib_prix" a été
+# abandonné, car il amplifiait démesurément les postes les trimestres où
+# l'IPC et le déflateur divergent fortement (ex. 2019T4, 2023T4 : facteur
+# > 20). L'écart entre les deux mesures est donc isolé dans un poste dédié
+# "Écart IPC / déflateur" plutôt que d'être réparti sur les 5 fonctions :
+# seule la répartition *relative* entre fonctions provient de l'IPC, jamais
+# amplifiée au-delà de ce que l'IPC lui-même indique.
 ipc_mensuel      <- read_csv(file.path(dir_data, "ipc_5divisions_mensuel.csv"), show_col_types = FALSE)
 ipc_ponderations <- read_csv(file.path(dir_data, "ipc_ponderations_2026.csv"), show_col_types = FALSE)
 
@@ -508,7 +512,11 @@ ipc_trim <- ipc_mensuel |>
   mutate(g_ipc = 100 * (indice / lag(indice) - 1)) |>
   ungroup() |>
   left_join(ipc_ponderations, by = "division") |>
-  mutate(contrib_brute = poids_pour_10000 / 10000 * g_ipc)
+  # Signe négatif : contrib_prix (déflateur, cf. section 4) mesure l'EFFET SUR LE
+  # POUVOIR D'ACHAT (négatif quand les prix montent), alors que g_ipc est le taux
+  # d'inflation brut (positif quand les prix montent) — il faut donc l'inverser
+  # pour rester sur la même convention de signe que le reste de la décomposition.
+  mutate(contrib_brute = -poids_pour_10000 / 10000 * g_ipc)
 
 ipc_trim_total <- ipc_trim |>
   group_by(annee, trim) |>
@@ -537,19 +545,24 @@ pa_trimestriel_uc <- niveaux_trim |>
             by = "trimestre") |>
   left_join(ipc_trim_total, by = c("annee", "trim")) |>
   mutate(
-    facteur_recalage = contrib_prix / contrib_brute_totale,
+    # Pas de recalage forcé : les 5 contributions IPC gardent leur valeur brute
+    # (déjà au bon signe). L'écart entre l'IPC (somme des 5) et le déflateur des
+    # comptes nationaux — deux mesures de prix différentes, qui peuvent diverger
+    # nettement un trimestre donné — est isolé dans un poste dédié plutôt que
+    # d'amplifier artificiellement les 5 postes IPC pour forcer une somme exacte.
+    contrib_residu_prix = contrib_prix - contrib_brute_totale,
     across(all_of(noms_contrib_nominal), ~ .x / 100 * lag(euros_par_uc), .names = "eurUC_{.col}"),
+    eurUC_contrib_residu_prix = contrib_residu_prix / 100 * lag(euros_par_uc),
     variation_reelle_euros_uc = pouvoir_achat_reconstitue / 100 * lag(euros_par_uc)
   )
 
 ipc_trim_recale <- ipc_trim |>
-  left_join(pa_trimestriel_uc |> select(annee, trim, facteur_recalage, euros_par_uc),
+  left_join(pa_trimestriel_uc |> select(annee, trim, euros_par_uc),
             by = c("annee", "trim")) |>
   group_by(division) |>
   arrange(annee, trim, .by_group = TRUE) |>
   mutate(
-    contrib_pp_recale = contrib_brute * facteur_recalage,
-    contrib_euros_uc  = contrib_pp_recale / 100 * lag(euros_par_uc)
+    contrib_euros_uc = contrib_brute / 100 * lag(euros_par_uc)
   ) |>
   ungroup() |>
   mutate(trimestre = paste0(annee, "T", trim))
@@ -563,6 +576,7 @@ labels_postes_detail <- c(
   contrib_autres          = "Autres ressources nettes",
   contrib_impots          = "Impôts sur le revenu et le patrimoine",
   contrib_cotisations     = "Cotisations sociales",
+  contrib_residu_prix     = "Écart IPC / déflateur",
   alimentation            = "Effet prix : alimentation",
   tabac                   = "Effet prix : tabac",
   produits_manufactures   = "Effet prix : produits manufacturés",
@@ -577,6 +591,7 @@ couleurs_postes_detail <- c(
   "Autres ressources nettes"              = "#9C755F",
   "Impôts sur le revenu et le patrimoine" = "#BAB0AC",
   "Cotisations sociales"                  = "#499894",
+  "Écart IPC / déflateur"                 = "#B3B3B3",
   "Effet prix : alimentation"             = "#E15759",
   "Effet prix : tabac"                    = "#EDC948",
   "Effet prix : produits manufacturés"    = "#F28E2B",
@@ -631,9 +646,9 @@ g5 <- g5_data |>
     x = NULL, y = "€ par UC, variation par rapport au trimestre précédent", fill = NULL,
     caption = paste0(
       "Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE. ",
-      "L'effet prix est décomposé par grande fonction de consommation à partir de l'IPC, ",
-      "pondérations 2026, recalé pour sommer exactement à l'effet prix du déflateur des comptes ",
-      "nationaux (cf. méthodologie) ; nombre d'UC trimestriel interpolé à partir de l'estimation annuelle."
+      "L'effet prix est décomposé par grande fonction de consommation à partir de l'IPC (pondérations ",
+      "2026, non recalées) ; l'écart avec le déflateur des comptes nationaux (mesure de prix différente) ",
+      "est isolé dans un poste dédié. Nombre d'UC trimestriel interpolé à partir de l'estimation annuelle."
     )
   ) +
   theme_minimal(base_size = 12) +
