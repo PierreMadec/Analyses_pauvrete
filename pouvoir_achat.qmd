@@ -104,6 +104,24 @@ Le @fig-euros-menage-uc rapporte le RDB nominal (en euros courants et en euros c
 show_girafe(file.path(path_g, "pa2_euros_menage_uc.rds"))
 ```
 
+Le @fig-niveau-trim-menage-uc reprend ce même niveau en euros par ménage et par UC, mais au **trimestre**, depuis 2017 : où en est-on aujourd'hui par rapport à 2017, en euros courants comme en euros constants.
+
+```{r}
+#| label: fig-niveau-trim-menage-uc
+#| fig-cap: "Revenu disponible brut par ménage et par unité de consommation, niveau trimestriel depuis 2017, euros courants et euros constants. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa6_niveau_trim_menage_uc.rds"))
+```
+
+Le @fig-niveau-trim-prix compare, sur la même période, le niveau du déflateur de la consommation (utilisé pour l'ensemble de ce document) et celui de l'indice des prix à la consommation (IPC) — les deux indices étant rebasés à 100 au premier trimestre affiché pour rendre leurs évolutions cumulées comparables. C'est ce même écart, trimestre par trimestre, qui apparaît comme poste "Écart IPC / déflateur" dans le @fig-decompo-trim-euros-uc.
+
+```{r}
+#| label: fig-niveau-trim-prix
+#| fig-cap: "Déflateur de la consommation et IPC, niveau trimestriel depuis 2017, indice base 100. Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa7_niveau_trim_prix.rds"))
+```
+
 ## Méthodologie et limites
 
 - Le RDB, sa décomposition en composantes et les taux de croissance officiels du pouvoir d'achat (total, par personne, par ménage, par UC) sont des séries INSEE exactes, sans retraitement.

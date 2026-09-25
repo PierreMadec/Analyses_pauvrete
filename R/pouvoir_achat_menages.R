@@ -660,13 +660,128 @@ g5 <- g5_data |>
 write_csv(pa_trimestriel_uc, file.path(dir_data, "pouvoir_achat_trimestriel_euros_uc.csv"))
 write_csv(ipc_trim_recale, file.path(dir_data, "ipc_contributions_trimestrielles.csv"))
 
+# ==============================================================================
+# 8. Niveaux trimestriels depuis 2017 : RDB par ménage/UC, et prix (déflateur
+#    vs IPC)
+# ==============================================================================
+
+# --- Nombre de ménages trimestriel (même interpolation que le nombre d'UC) --
+menages_annuel_pour_interp <- pa_annuel |>
+  filter(!is.na(nb_menages_milliers)) |>
+  transmute(t = annee + 0.5, nb_menages_milliers)
+interp_menages <- approx(menages_annuel_pour_interp$t, menages_annuel_pour_interp$nb_menages_milliers,
+                          xout = niveaux_trim$annee + (niveaux_trim$trim - 0.5) / 4, rule = 2)
+
+# --- Déflateur trimestriel chaîné (ancre = dernier trimestre = 100) ---------
+pouvachat_trim_ord <- pouvachat_trim |> arrange(annee, trim)
+deflateur_trim_indice <- chainer_niveau(
+  seq_along(pouvachat_trim_ord$trimestre),  # index séquentiel (chainer_niveau attend une clé triée)
+  pouvachat_trim_ord$g_prix, nrow(pouvachat_trim_ord), 100
+)
+pouvachat_trim_ord$deflateur_trim_indice <- deflateur_trim_indice
+
+niveau_trim <- niveaux_trim |>
+  select(trimestre, annee, trim, rdb) |>
+  mutate(
+    nb_menages_milliers_interp = interp_menages$y,
+    nb_uc_milliers_interp      = interp_uc$y,
+    euros_par_menage = rdb * 1e9 / (nb_menages_milliers_interp * 1e3),
+    euros_par_uc      = rdb * 1e9 / (nb_uc_milliers_interp * 1e3)
+  ) |>
+  left_join(pouvachat_trim_ord |> select(trimestre, deflateur_trim_indice), by = "trimestre") |>
+  mutate(
+    euros_par_menage_reel = euros_par_menage * 100 / deflateur_trim_indice,
+    euros_par_uc_reel      = euros_par_uc * 100 / deflateur_trim_indice
+  )
+
+write_csv(niveau_trim, file.path(dir_data, "pouvoir_achat_niveau_trimestriel.csv"))
+
+annee_debut_niveau <- 2017
+niveau_trim_recent <- niveau_trim |> filter(annee >= annee_debut_niveau)
+annee_base_prix_trim <- pouvachat_trim_ord$trimestre[nrow(pouvachat_trim_ord)]
+
+g6_data <- niveau_trim_recent |>
+  select(trimestre, annee, trim, euros_par_menage, euros_par_uc,
+         euros_par_menage_reel, euros_par_uc_reel) |>
+  pivot_longer(-c(trimestre, annee, trim), names_to = "serie", values_to = "euros") |>
+  mutate(
+    unite = if_else(str_detect(serie, "menage"), "Par ménage", "Par unité de consommation"),
+    prix  = if_else(str_detect(serie, "_reel"), paste0("Euros constants ", annee_base_prix_trim), "Euros courants"),
+    trimestre = factor(trimestre, levels = unique(trimestre[order(annee, trim)])),
+    tooltip = paste0(unite, " — ", prix, "\n", trimestre, " : ",
+                      scales::comma(round(euros), big.mark = " "), " €"),
+    data_id = paste0(serie, "_", trimestre)
+  )
+
+g6 <- g6_data |>
+  ggplot(aes(x = trimestre, y = euros, color = prix, group = prix)) +
+  geom_line(linewidth = 1) +
+  geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 1.4, alpha = 0.7) +
+  facet_wrap(~unite, scales = "free_y") +
+  scale_y_continuous(labels = scales::label_comma(big.mark = " ", suffix = " €")) +
+  labs(
+    x = NULL, y = NULL, color = NULL,
+    caption = paste0(
+      "Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE. ",
+      "“Par unité de consommation” repose sur une ESTIMATION du nombre d'UC (cf. méthodologie) ; ",
+      "“Par ménage” repose sur le nombre de ménages ancré sur les recensements."
+    )
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8))
+
+# --- Graphique 7 : déflateur vs IPC, niveau trimestriel depuis 2017 ---------
+ipc_ensemble_mensuel <- read_csv(file.path(dir_data, "ipc_ensemble_mensuel.csv"), show_col_types = FALSE)
+ipc_ensemble_trim <- ipc_ensemble_mensuel |>
+  mutate(trim = ceiling(mois / 3)) |>
+  group_by(annee, trim) |>
+  summarise(ipc_indice = mean(indice), .groups = "drop") |>
+  arrange(annee, trim) |>
+  mutate(trimestre = paste0(annee, "T", trim))
+
+g7_data <- niveau_trim_recent |>
+  select(trimestre, annee, trim, deflateur_trim_indice) |>
+  inner_join(ipc_ensemble_trim |> select(trimestre, ipc_indice), by = "trimestre") |>
+  arrange(annee, trim) |>
+  mutate(
+    deflateur_base100 = 100 * deflateur_trim_indice / first(deflateur_trim_indice),
+    ipc_base100        = 100 * ipc_indice / first(ipc_indice),
+    trimestre = factor(trimestre, levels = trimestre)
+  ) |>
+  select(trimestre, "Déflateur de la consommation" = deflateur_base100,
+         "IPC ensemble" = ipc_base100) |>
+  pivot_longer(-trimestre, names_to = "serie", values_to = "indice") |>
+  mutate(
+    tooltip = paste0(serie, "\n", trimestre, " : ", sprintf("%.1f", indice)),
+    data_id = paste0(serie, "_", trimestre)
+  )
+
+g7 <- g7_data |>
+  ggplot(aes(x = trimestre, y = indice, color = serie, group = serie)) +
+  geom_line(linewidth = 1) +
+  geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 1.6) +
+  labs(
+    x = NULL, y = paste0("Indice, base 100 en ", first(levels(g7_data$trimestre))), color = NULL,
+    caption = paste0(
+      "Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE. ",
+      "Les deux indices sont recalés à 100 sur le premier trimestre affiché pour comparer leurs ",
+      "évolutions cumulées ; en niveau absolu ils ne sont pas directement comparables."
+    )
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8))
+
 # --- Sauvegarde --------------------------------------------------------------
 graphiques_pa <- list(
   pa1_decomposition_annuelle       = g1,
   pa2_euros_menage_uc              = g2,
   pa3_decomposition_trim           = g3,
   pa4_decomposition_annuelle_euros = g4,
-  pa5_decomposition_trim_euros_uc  = g5
+  pa5_decomposition_trim_euros_uc  = g5,
+  pa6_niveau_trim_menage_uc        = g6,
+  pa7_niveau_trim_prix             = g7
 )
 
 walk2(names(graphiques_pa), graphiques_pa, function(nom, g) {
