@@ -45,6 +45,10 @@ path_fig <- "figure"
 # 1. Base : PR en emploi, 18-64 ans, avec configuration ménage via biactivite
 # ==============================================================================
 
+.pm  <- read.csv("data/parametres_macro.csv")
+.ipc <- setNames(.pm$ipc, as.character(.pm$annee))
+.s05 <- seuils_annuels$seuil_std[seuils_annuels$annee == 2005]
+
 base_oax <- data_all |>
   filter(lpr == 1, acteu_ind == "Emploi",
          age_num >= 18, age_num <= 64) |>
@@ -52,6 +56,9 @@ base_oax <- data_all |>
   filter(!is.na(seuil_std), !is.na(typmen), !is.na(biactivite)) |>
   mutate(
     pauvre = as.integer(nivviem < seuil_std),
+    # seuil ancré : 60 % de la médiane de 2005, indexé sur l'inflation
+    seuil_anc  = as.numeric(.s05 * .ipc[as.character(annee)] / .ipc["2005"]),
+    pauvre_anc = as.integer(nivviem < seuil_anc),
     # Configuration ménage robuste (biactivite toujours défini pour PR en emploi)
     config = case_when(
       typmen == "Personne seule"           ~ "Seul sans enfant",
@@ -65,9 +72,21 @@ base_oax <- data_all |>
   ) |>
   filter(config != "Autre")
 
+# Diplôme et PCS harmonisés (cf. R/extract_dipl_pcs.R)
+f_dp <- file.path(path_fig, "dipl_pcs.rds")
+if (!file.exists(f_dp) && dir.exists("/Users/pierremadec/Documents/ERFS_backup")) {
+  source("R/extract_dipl_pcs.R", local = FALSE)
+}
+if (file.exists(f_dp)) {
+  base_oax <- base_oax |>
+    mutate(ident = as.character(ident)) |>
+    left_join(readRDS(f_dp) |> mutate(ident = as.character(ident)),
+              by = c("annee", "ident"))
+}
+
 # Périodes de comparaison
-annees_t1 <- 2010:2012   # période de référence (cohérente avec le graphique de contribution)
-annees_t2 <- 2021:2023   # période récente
+annees_t1 <- 2010:2011   # période de référence (fenêtre de deux ans, cf. annees_t2)
+annees_t2 <- 2023:2024   # période récente
 annees_dispo <- unique(base_oax$annee)
 annees_t1 <- annees_t1[annees_t1 %in% annees_dispo]
 annees_t2 <- annees_t2[annees_t2 %in% annees_dispo]
@@ -88,7 +107,12 @@ d2 <- base_oax |> filter(annee %in% annees_t2)
 # 2. Sélection dynamique des covariables disponibles dans les deux périodes
 # ==============================================================================
 
-vars_cand <- c("config", "age_cat", "sexe_cat", "diplome", "immi_cat")
+# Spécification retenue : on contrôle la qualification (diplôme, PCS), sans quoi
+# l'effet de composition est biaisé — la population en emploi s'est fortement
+# qualifiée sur la période. `diplome` (data_all) n'existe qu'à partir de 2017 :
+# c'est `dipl_h` (harmonisé, cf. extract_dipl_pcs.R) qui est utilisé.
+vars_cand <- c("config", "age_cat", "sexe_cat", "immi_cat",
+               "statut_occ", "dipl_h", "pcs_h")
 
 ok_dans <- function(df, v) {
   if (!v %in% names(df)) return(FALSE)
@@ -191,6 +215,9 @@ contrib_compo_detail <- tibble(
       variable == "sexe_cat" ~ "Sexe",
       variable == "diplome"  ~ "Diplôme",
       variable == "immi_cat" ~ "Origine migratoire",
+      variable == "statut_occ" ~ "Statut d'occupation du logement",
+      variable == "dipl_h"   ~ "Diplôme",
+      variable == "pcs_h"    ~ "Catégorie socioprofessionnelle",
       TRUE ~ variable
     ),
     labs_vars = fct_reorder(labs_vars, contrib),
@@ -202,48 +229,77 @@ contrib_compo_detail <- tibble(
   )
 
 # ==============================================================================
-# 6. Figure A : décomposition globale (2 voies, sans interaction)
+# 6. Figure A : décomposition aux DEUX seuils (relatif et ancré)
+#
+# L'effet de composition ne dépend pas du seuil retenu (les caractéristiques de
+# la population sont les mêmes) : c'est le résultat robuste. L'effet de
+# coefficients, lui, change de signe — il mesure la course entre le revenu d'un
+# profil donné et la médiane, et prolonge au niveau individuel l'écart déjà
+# visible entre les deux courbes de la figure « seuil relatif / seuil ancré ».
 # ==============================================================================
 
-label_gap <- sprintf("Gap total : %+.2f pts", gap_obs * 100)
+decomposer <- function(y) {
+  net <- function(df) df |>
+    transmute(pauvre = .data[[y]], wprm, across(all_of(vars_ok))) |>
+    filter(if_all(all_of(vars_ok), ~!is.na(.)), !is.na(pauvre)) |>
+    mutate(wprm = wprm / mean(wprm))
+  a <- net(d1); b <- net(d2)
+  f <- as.formula(paste("pauvre ~", paste(vars_ok, collapse = " + ")))
+  mp <- lm(f, bind_rows(a |> mutate(wprm = wprm * nrow(a) / (nrow(a) + nrow(b))),
+                        b |> mutate(wprm = wprm * nrow(b) / (nrow(a) + nrow(b)))),
+           weights = wprm)
+  Xa <- model.matrix(f, a); Xb <- model.matrix(f, b)
+  cc <- intersect(colnames(Xa), colnames(Xb))
+  Xba <- colSums(Xa[, cc, drop = FALSE] * (a$wprm / sum(a$wprm)))
+  Xbb <- colSums(Xb[, cc, drop = FALSE] * (b$wprm / sum(b$wprm)))
+  bp  <- replace(coef(mp)[cc], is.na(coef(mp)[cc]), 0)
+  gap <- weighted.mean(b$pauvre, b$wprm) - weighted.mean(a$pauvre, a$wprm)
+  comp <- as.numeric((Xbb - Xba) %*% bp)
+  c(gap = gap, composition = comp, coefficients = gap - comp)
+}
+
+dec_rel <- decomposer("pauvre")
+dec_anc <- decomposer("pauvre_anc")
+cat(sprintf("\nSeuil relatif : gap %+0.2f | comp %+0.2f | coef %+0.2f\n",
+            100*dec_rel["gap"], 100*dec_rel["composition"], 100*dec_rel["coefficients"]))
+cat(sprintf("Seuil ancré   : gap %+0.2f | comp %+0.2f | coef %+0.2f\n",
+            100*dec_anc["gap"], 100*dec_anc["composition"], 100*dec_anc["coefficients"]))
 
 decomp_global <- tibble(
-  effet   = factor(
-    c("Composition\n(profil des travailleurs)",
-      "Coefficients\n(protection par profil)"),
-    levels = c("Composition\n(profil des travailleurs)",
-               "Coefficients\n(protection par profil)")
-  ),
-  valeur  = c(composition, coefficients_) * 100,
-  sens    = if_else(c(composition, coefficients_) * 100 >= 0, "Hausse", "Baisse"),
-  tooltip = paste0(
-    c("Effet composition", "Effet coefficients"),
-    " : ", sprintf("%+.2f", c(composition, coefficients_) * 100), " pts de %"
-  ),
-  data_id = c("global_comp", "global_coef")
-)
+  effet  = factor(rep(c("Composition\n(profil des travailleurs)",
+                        "Coefficients\n(à profil donné)"), 2),
+                  levels = c("Composition\n(profil des travailleurs)",
+                             "Coefficients\n(à profil donné)")),
+  seuil  = factor(rep(c("Seuil relatif", "Seuil ancré (pouvoir d'achat constant)"), each = 2),
+                  levels = c("Seuil relatif", "Seuil ancré (pouvoir d'achat constant)")),
+  valeur = 100 * c(dec_rel["composition"], dec_rel["coefficients"],
+                   dec_anc["composition"], dec_anc["coefficients"])
+) |>
+  mutate(tooltip = sprintf("%s — %s : %+.2f pt", gsub("\n", " ", effet), seuil, valeur),
+         data_id = paste0(effet, seuil))
 
-g_oaxaca_barre <- ggplot(decomp_global, aes(x = effet, y = valeur, fill = sens)) +
-  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id), width = 0.55) +
+g_oaxaca_barre <- ggplot(decomp_global, aes(x = effet, y = valeur, fill = seuil)) +
+  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id),
+                       position = position_dodge(width = 0.7), width = 0.6) +
   geom_hline(yintercept = 0, linewidth = 0.4, colour = "grey40") +
-  annotate("text", x = Inf, y = max(abs(decomp_global$valeur)) * 0.9 * sign(gap_obs * 100),
-           label = label_gap, hjust = 1.05, size = 3.5, colour = "grey30") +
-  scale_fill_manual(values = c("Hausse" = "#e31a1c", "Baisse" = "#1f78b4"),
-                    guide = "none") +
-  scale_y_continuous(labels = label_number(suffix = " pts")) +
+  geom_text(aes(label = sprintf("%+.1f", valeur),
+                vjust = ifelse(valeur >= 0, -0.4, 1.3)),
+            position = position_dodge(width = 0.7), size = 3.2, colour = "grey20") +
+  scale_fill_manual(values = c("Seuil relatif" = "#2674DD",
+                               "Seuil ancré (pouvoir d'achat constant)" = "#8D30D4"),
+                    name = NULL) +
+  scale_y_continuous(labels = label_number(suffix = " pts"), expand = expansion(mult = 0.16)) +
   labs(
-    x       = NULL,
-    y       = "Contribution à l'écart de taux de pauvreté (pts de %)",
+    x = NULL, y = "contribution à la variation du taux de pauvreté (points)",
     caption = sprintf(
-      "Source : INSEE, ERFS, calculs de l'auteur.\n%s. Champ : PR en emploi, 18-64 ans.\n",
-      periodes_label
-    )
+      "Source : INSEE, ERFS, calculs de l'auteur.\n%s. Champ : PR en emploi, 18-64 ans. Variation totale : %+.2f pt au seuil relatif, %+.2f pt au seuil ancré.\n",
+      periodes_label, 100*dec_rel["gap"], 100*dec_anc["gap"])
   ) +
   theme_minimal(base_size = 12) +
-  theme(
-    panel.grid.minor = element_blank(),
-    plot.caption     = element_text(size = 8, colour = "grey50", hjust = 0)
-  )
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank(),
+        legend.position = "bottom",
+        plot.caption = element_text(size = 8, colour = "grey50", hjust = 0))
 
 saveRDS(g_oaxaca_barre, file.path(path_fig, "oaxaca_tp_barre.rds"))
 cat("oaxaca_tp_barre : ok\n")
@@ -312,6 +368,9 @@ contrib_coef_detail <- tibble(
       variable == "sexe_cat" ~ "Sexe",
       variable == "diplome"  ~ "Diplôme",
       variable == "immi_cat" ~ "Origine migratoire",
+      variable == "statut_occ" ~ "Statut d'occupation du logement",
+      variable == "dipl_h"   ~ "Diplôme",
+      variable == "pcs_h"    ~ "Catégorie socioprofessionnelle",
       TRUE ~ variable
     ),
     labs_vars = fct_reorder(labs_vars, contrib),

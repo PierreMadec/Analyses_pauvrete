@@ -200,7 +200,7 @@ construire_base_individus <- function(annee) {
   # Listes de variables individus à récupérer
   # --------------------------------------------------------------------------
   vars_ind_cand <- c(
-    cle, "lpr", "lprm",
+    cle, "noindiv", "lpr", "lprm",
     "acteu",                              # activite individuelle (3 cat.)
     "age", "sexe", "immi",
     "dip5", "dip3",                       # diplome
@@ -208,7 +208,8 @@ construire_base_individus <- function(annee) {
     "cdd", "cdi", "interim", "contra",   # type de contrat (contra: 2015-2020, cdd/cdi/interim: 2023+)
     "tpstrav", "sousemplr",              # temps partiel / sous-emploi (2015+)
     "nbhab_usual_emp1",                  # heures habituelles (2015+)
-    "css2", "pcs1", "pcs1q", "csp"      # PCS (csp: 2015-2020 dans IRF, pcs1q: 2023+)
+    "css2", "pcs1", "pcs1q", "csp",     # PCS (csp: 2015-2020 dans IRF, pcs1q: 2023+)
+    "admhandr", "aah", "invalid"        # situation de handicap / invalidite (2021+ ; invalid: 2023)
   )
   vars_ind_sel <- intersect(vars_ind_cand, names(ind))
 
@@ -259,10 +260,13 @@ construire_base_individus <- function(annee) {
   df$nivvie_avant     <- df$rev_avant_redist / df$nb_uci
 
   # Type de ménage
+  # Codage INSEE standard de typmen5 / typlog5 :
+  #   1 Personne seule · 2 Famille monoparentale · 3 Couple sans enfant ·
+  #   4 Couple avec enfant(s) · 5 Autre (ménage complexe)
   df$typmen <- factor(
     recode_typmen(df), levels = 1:5,
-    labels = c("Personne seule", "Couple sans enfant",
-               "Couple avec enfant(s)", "Famille monoparentale", "Autre")
+    labels = c("Personne seule", "Famille monoparentale",
+               "Couple sans enfant", "Couple avec enfant(s)", "Autre")
   )
 
   # Activité PR (ménage)
@@ -395,10 +399,13 @@ construire_base_individus <- function(annee) {
   } else NA_character_
 
   # Diplôme
+  # NB : dip5 suit la convention INSEE "du plus diplômé au moins diplômé"
+  # (1 = Supérieur au bac ... 5 = Sans diplôme), vérifié par croisement avec
+  # la PCS (part de cadres : 60 % au niveau 1, 3,6 % au niveau 5).
   if ("dip5" %in% names(df)) {
     df$diplome <- factor(
       suppressWarnings(as.integer(as.character(df$dip5))), levels = 1:5,
-      labels = c("Sans diplome", "CEP/BEPC/Brevet", "CAP/BEP", "Bac", "Superieur au bac")
+      labels = c("Superieur au bac", "Bac", "CAP/BEP", "CEP/BEPC/Brevet", "Sans diplome")
     )
   } else if ("dip3" %in% names(df)) {
     df$diplome <- factor(
@@ -435,12 +442,26 @@ construire_base_individus <- function(annee) {
   # PCS harmonisée 2015-2023
   df$pcs_cat <- recode_pcs(df)
 
+  # Situation de handicap / invalidité (reconnaissance administrative, 2021+)
+  # ADMHANDR == 1 : reconnaissance administrative de handicap (y compris AAH)
+  # AAH == 1      : perception de l'AAH
+  # INVALID == 1  : perception d'une pension d'invalidité (2023)
+  # NB : l'ERFS ne comporte pas l'indicateur GALI « limité dans les activités ».
+  hcol <- function(v) if (v %in% names(df))
+    suppressWarnings(as.integer(as.character(df[[v]]))) else rep(NA_integer_, nrow(df))
+  .admh <- hcol("admhandr"); .aah <- hcol("aah"); .inv <- hcol("invalid")
+  .interroge <- !(is.na(.admh) & is.na(.aah) & is.na(.inv))
+  .hand <- (.admh == 1) | (.aah == 1) | (.inv == 1)
+  .hand <- ifelse(is.na(.hand), FALSE, .hand)
+  df$handicap_ind <- ifelse(.interroge, .hand, NA)
+
   # --------------------------------------------------------------------------
   df$annee <- annee
   df$ident  <- as.character(df[[cle]])   # clé ménage conservée pour les opérations ménage
+  df$noindiv <- if ("noindiv" %in% names(df)) as.character(df$noindiv) else NA_character_
 
   df |> select(
-    annee, ident, lpr, wprm,
+    annee, ident, noindiv, lpr, wprm,
     # Niveau de vie ménage
     nivviem, revdispm, nb_uci,
     prest_logement, total_prestations, total_impots,
@@ -455,7 +476,7 @@ construire_base_individus <- function(annee) {
     typmen, typmen2, acteu_pr, acteu_cj, biactivite, nb_enfants, statut_occ, groupe,
     # Variables individuelles harmonisées
     acteu_ind, age_num, age_cat, sexe_cat, immi_cat, diplome,
-    type_contrat, tpstrav, sousemplr, pcs_cat
+    type_contrat, tpstrav, sousemplr, pcs_cat, handicap_ind
   )
 }
 

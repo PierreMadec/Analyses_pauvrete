@@ -51,8 +51,8 @@ theme_erfs <- function() {
     )
 }
 
-pal_ra <- c("Seuil relatif (médiane courante)" = "#e31a1c",
-            "Seuil ancré (pouvoir d'achat 2005)" = "#1f78b4")
+pal_ra <- c("Seuil relatif (médiane courante)" = "#8D30D4",
+            "Seuil ancré (pouvoir d'achat 2005)" = "#2674DD")
 
 # ── Seuil ancré = seuil relatif 2005 porté par l'inflation (IPC) ──────────────
 pm  <- read_csv("data/parametres_macro.csv", show_col_types = FALSE)
@@ -89,21 +89,21 @@ faire_fig <- function(dat, titre_y, caption) {
     geom_line_interactive(linewidth = 1.1) +
     geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.4) +
     scale_colour_manual(values = pal_ra) +
-    scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+    scale_x_continuous(breaks = seq(2005, 2025, 2)) +
     scale_y_continuous(labels = label_number(suffix = " %")) +
     labs(y = titre_y, caption = caption) +
     theme_erfs()
 }
 
 cap_global <- paste0(
-  "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+  "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
   "Seuil relatif : 60 % de la médiane de niveau de vie de l'année. ",
   "Seuil ancré : seuil 2005 porté par l'inflation (pouvoir d'achat constant)."
 )
 
 # ── Figure 1 : population totale ──────────────────────────────────────────────
 dat_glob <- taux_rel_anc(dd, "Ensemble de la population")
-g_global <- faire_fig(dat_glob, "Taux de pauvreté (%)", cap_global)
+g_global <- faire_fig(dat_glob, "taux de pauvreté (%)", cap_global)
 saveRDS(g_global, file.path(path_fig, "pauvrete_rel_anc_global.rds"))
 cat("pauvrete_rel_anc_global : ok\n")
 
@@ -112,7 +112,7 @@ dat_trav <- dd |>
   filter(lpr == 1, acteu_ind == "Emploi", age_num >= 18, age_num <= 64) |>
   taux_rel_anc("Travailleurs (PR en emploi, 18-64 ans)")
 g_trav <- faire_fig(
-  dat_trav, "Taux de pauvreté laborieuse (%)",
+  dat_trav, "taux de pauvreté laborieuse (%)",
   paste0(cap_global, "\nChamp : personnes de référence en emploi, 18-64 ans.")
 )
 saveRDS(g_trav, file.path(path_fig, "pauvrete_rel_anc_trav.rds"))
@@ -151,11 +151,11 @@ g_decroch <- ggplot(distrib, aes(x = annee, y = indice, colour = serie, group = 
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.4) +
   scale_colour_manual(values = c("Médiane (D5)" = "#33a02c", "1er décile (D1)" = "#e31a1c")) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   labs(
     y = "Niveau de vie réel (indice base 100 = 2005)",
     caption = paste0(
-      "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+      "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
       "Niveaux de vie déflatés par l'IPC. Lecture : un écart croissant entre les ",
       "deux courbes traduit un décrochage du bas de la distribution par rapport au milieu."
     )

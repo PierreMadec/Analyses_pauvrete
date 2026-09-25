@@ -18,7 +18,7 @@ if (!exists("data_all") || !exists("seuils_annuels")) {
 
 path_fig <- "figure"
 
-caption_base <- "Source : INSEE, ERFS 2005-2023, calculs de l'auteur."
+caption_base <- "Source : INSEE, ERFS 2005-2024, calculs de l'auteur."
 
 # ==============================================================================
 # Graphique 1 : Contribution de chaque statut d'activité à l'évolution
@@ -111,7 +111,7 @@ g_contrib_activite <- ggplot(
             inherit.aes = FALSE) +
   geom_hline(yintercept = 0, linewidth = 0.4, colour = "grey30") +
   scale_fill_manual(values = pal_activite, drop = FALSE) +
-  scale_x_continuous(breaks = seq(2010, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2010, 2024, 2)) +
   scale_y_continuous(labels = label_number(suffix = " pt")) +
   labs(
     x       = NULL,
@@ -219,7 +219,7 @@ g_shiftshare <- ggplot(ss_long,
   geom_hline(yintercept = 0, linewidth = 0.4, colour = "grey40") +
   facet_wrap(~statut4, ncol = 2, scales = "free_y") +
   scale_fill_manual(values = pal_ss) +
-  scale_x_continuous(breaks = seq(2010, 2023, 4)) +
+  scale_x_continuous(breaks = seq(2010, 2024, 4)) +
   scale_y_continuous(labels = label_number(suffix = " pt")) +
   labs(
     x       = NULL,
@@ -247,12 +247,23 @@ cat("g11c_shiftshare : ok\n")
 # Graphique 0 : Taux d'emploi 18-64 ans et taux de pauvreté (double axe)
 # ==============================================================================
 
+# Taux de pauvreté : champ standard INSEE (tous âges, champ_calcul déjà
+# appliqué dans data_all). NE PAS filtrer sur acteu_ind : cette variable est
+# NA pour les ~11 M d'enfants, dont l'exclusion abaisse le taux d'environ
+# 1,5 point et crée un faux recul 2023->2024 (série reproduisant l'INSEE :
+# 15,4 % en 2023 comme en 2024).
+base_pauvrete <- data_all |>
+  left_join(seuils_annuels |> select(annee, seuil_std), by = "annee") |>
+  filter(!is.na(wprm), wprm > 0, !is.na(nivviem))
+
+# Base pour le taux d'emploi : restreinte aux individus dont le statut
+# d'activité est renseigné (adultes), puis aux 18-64 ans.
 base_constat <- data_all |>
   left_join(seuils_annuels |> select(annee, seuil_std), by = "annee") |>
   filter(!is.na(wprm), wprm > 0, !is.na(acteu_ind), !is.na(nivviem), !is.na(age_num))
 
-# Taux de pauvreté global (tous âges)
-taux_pauvrete <- base_constat |>
+# Taux de pauvreté global (tous âges, champ INSEE)
+taux_pauvrete <- base_pauvrete |>
   group_by(annee) |>
   summarise(
     taux_pauv = 100 * sum(wprm * (nivviem < seuil_std), na.rm = TRUE) / sum(wprm),
@@ -317,7 +328,7 @@ g0_emploi_pauvrete <- ggplot(g0_data, aes(x = annee)) +
   ) +
   # Axe droit (pauvreté)
   scale_y_continuous(
-    name   = "Taux d'emploi 18-64 ans (%)",
+    name   = "taux d'emploi 18-64 ans (%)",
     labels = label_number(suffix = " %"),
     sec.axis = sec_axis(
       # Closure avec valeurs baked-in : évite l'erreur "object not found"
@@ -327,15 +338,15 @@ g0_emploi_pauvrete <- ggplot(g0_data, aes(x = annee)) +
         .sf <- scale_fac
         function(x) (x - .sh) / .sf
       }),
-      name      = "Taux de pauvreté (%)",
+      name      = "taux de pauvreté (%)",
       labels    = label_number(suffix = " %")
     )
   ) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_colour_manual(
     values = c(
-      "Taux d'emploi 18-64 ans"         = "#1f78b4",
-      "Taux de pauvreté (éch. droite)"  = "#e31a1c"
+      "Taux d'emploi 18-64 ans"         = "#2674DD",
+      "Taux de pauvreté (éch. droite)"  = "#E91422"
     )
   ) +
   labs(
@@ -347,10 +358,10 @@ g0_emploi_pauvrete <- ggplot(g0_data, aes(x = annee)) +
   theme(
     panel.grid.minor = element_blank(),
     legend.position  = "bottom",
-    axis.title.y.right = element_text(colour = "#e31a1c"),
-    axis.text.y.right  = element_text(colour = "#e31a1c"),
-    axis.title.y.left  = element_text(colour = "#1f78b4"),
-    axis.text.y.left   = element_text(colour = "#1f78b4"),
+    axis.title.y.right = element_text(colour = "#E91422"),
+    axis.text.y.right  = element_text(colour = "#E91422"),
+    axis.title.y.left  = element_text(colour = "#2674DD"),
+    axis.text.y.left   = element_text(colour = "#2674DD"),
     plot.caption = element_text(size = 8, colour = "grey50", hjust = 0)
   )
 

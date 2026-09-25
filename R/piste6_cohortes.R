@@ -32,22 +32,30 @@ base <- data_all |>
       annee <= 2009 ~ "2005-2009",
       annee <= 2014 ~ "2010-2014",
       annee <= 2019 ~ "2015-2019",
-      TRUE          ~ "2020-2023"
+      TRUE          ~ "2020-2024"
     )
   )
 
-# ── Figure 1 : taux de pauvreté à 25-34 ans selon la cohorte ─────────────────
+# ── Figure 1 : taux de pauvreté À ÂGE FIXE (27-31 ans) selon la cohorte ──────
+# Tranche d'âge étroite + on ne garde que les cohortes quinquennales observées
+# sur TOUS les âges 27..31 dans la fenêtre 2005-2024 (born 1975-79 -> 1990-94).
+# Objectif : éliminer le biais de composition d'âge des cohortes extrêmes
+# (les nées ~1970 ne sont vues qu'en fin de tranche 25-34, les nées ~1995 qu'en
+# début), qui gonflait le dégradé apparent quand on prenait 25-34 ans en entier.
+
+A1 <- 27L; A2 <- 31L
 
 cohortes_jeunes <- base |>
-  filter(age_num >= 25, age_num <= 34) |>
+  filter(age_num >= A1, age_num <= A2) |>
   group_by(cohorte5) |>
   summarise(
-    tx = weighted.mean(pauvre, wprm, na.rm = TRUE),
+    tx           = weighted.mean(pauvre, wprm, na.rm = TRUE),
+    ages_couv    = n_distinct(age_num),
     annee_centre = round(mean(annee)),
-    n = n(),
+    n            = n(),
     .groups = "drop"
   ) |>
-  filter(n >= 500, cohorte5 >= 1970) |>
+  filter(ages_couv == (A2 - A1 + 1), n >= 500) |>   # cohorte complète sur la tranche
   mutate(
     label_coh = sprintf("Nés\n%d-%d", cohorte5, cohorte5 + 4),
     cohorte5  = as.factor(cohorte5)
@@ -57,24 +65,23 @@ g_jeunes <- ggplot(cohortes_jeunes,
   aes(x = cohorte5, y = tx,
       tooltip = sprintf("Cohorte %s — %.1f %%", cohorte5, 100 * tx),
       data_id = cohorte5)) +
-  geom_col_interactive(fill = "#e31a1c", alpha = 0.85, width = 0.65) +
-  geom_text(aes(label = sprintf("%.1f %%", 100 * tx)),
-            vjust = -0.4, size = 3.2) +
+  geom_col_interactive(fill = "#2674DD", alpha = 0.85, width = 0.65) +
   scale_x_discrete(labels = function(x) sprintf("Nés %s-%s", x, as.integer(x) + 4)) +
   scale_y_continuous(labels = percent_format(accuracy = 0.1),
                      limits = c(0, 0.13), expand = c(0, 0.002)) +
   labs(
-    x = "Cohorte de naissance",
-    y = "Taux de pauvreté laborieuse à 25-34 ans",
-    caption = paste0("Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
-                     "Champ : PR en emploi 25-34 ans. Chaque barre agrège toutes les\n",
-                     "observations de la cohorte disponibles sur la période.")
+    x = "cohorte de naissance",
+    y = sprintf("taux de pauvreté laborieuse à %d-%d ans", A1, A2),
+    caption = paste0("Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
+                     sprintf("Champ : PR en emploi %d-%d ans. Seules les cohortes observées sur\n", A1, A2),
+                     "tous ces âges dans la période sont retenues (à âge comparable).")
   ) +
   theme_minimal(base_size = 12) +
   theme(panel.grid.major.x = element_blank(),
         panel.grid.minor = element_blank())
 
 saveRDS(g_jeunes, file.path(path_fig, "cohortes_jeunes.rds"))
+cat("cohortes_jeunes (27-31 ans, cohortes complètes) :\n"); print(as.data.frame(cohortes_jeunes[c("label_coh","tx","n")]))
 
 # ── Figure 2 : profil âge-pauvreté par période ───────────────────────────────
 
@@ -88,11 +95,11 @@ age_periode <- base |>
   mutate(
     age_lab = sprintf("%d-%d", age5, age5 + 4),
     age_lab = factor(age_lab, levels = unique(age_lab[order(age5)])),
-    periode = factor(periode, levels = c("2005-2009","2010-2014","2015-2019","2020-2023"))
+    periode = factor(periode, levels = c("2005-2009","2010-2014","2015-2019","2020-2024"))
   )
 
 pal_per <- c("2005-2009" = "#a6cee3", "2010-2014" = "#1f78b4",
-             "2015-2019" = "#ff7f00", "2020-2023" = "#e31a1c")
+             "2015-2019" = "#ff7f00", "2020-2024" = "#e31a1c")
 
 g_age <- ggplot(age_periode,
   aes(x = age_lab, y = tx, colour = periode, group = periode,
@@ -106,7 +113,7 @@ g_age <- ggplot(age_periode,
     x = "Tranche d'âge",
     y = "Taux de pauvreté laborieuse",
     colour = "Période",
-    caption = paste0("Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+    caption = paste0("Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
                      "Champ : PR en emploi 18-64 ans.")
   ) +
   theme_minimal(base_size = 12) +

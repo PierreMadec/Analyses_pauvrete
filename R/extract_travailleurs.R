@@ -27,7 +27,10 @@ if (!dir.exists(path_fig)) dir.create(path_fig)
 read1 <- function(f) {
   ext <- tools::file_ext(f)
   out <- tryCatch(
-    if (ext == "sas7bdat") read_sas(f) else read_dta(f),
+    if (ext == "sas7bdat") read_sas(f)
+    else if (ext == "csv") as.data.frame(data.table::fread(f, showProgress = FALSE,
+                                                           na.strings = c("", "NA")))
+    else read_dta(f),
     error = function(e) {
       if (ext == "dta") read_dta(f, encoding = "latin1") else stop(e)
     }
@@ -45,7 +48,7 @@ get1 <- function(df, cands) {
 extraire_annee <- function(an) {
   d <- file.path(base_path, paste("ERFS", an))
   if (!dir.exists(d)) return(NULL)
-  fs <- list.files(d, pattern = "\\.(dta|sas7bdat)$", full.names = TRUE)
+  fs <- list.files(d, pattern = "\\.(dta|sas7bdat|csv)$", full.names = TRUE)
   fi <- fs[grepl("indiv|irf", basename(fs), ignore.case = TRUE)]
   if (length(fi) == 0) return(NULL)
 
@@ -97,7 +100,7 @@ extraire_annee <- function(an) {
 }
 
 # ── Test ou run complet ───────────────────────────────────────────────────────
-annees <- if (exists("ANNEES_TEST")) ANNEES_TEST else 2005:2023
+annees <- if (exists("ANNEES_TEST")) ANNEES_TEST else 2005:2024
 
 res <- list()
 for (an in annees) {

@@ -33,18 +33,18 @@ if (!exists("data_all") || !exists("seuils_annuels")) {
 path_fig <- "figure"
 
 caption_base <- paste0(
-  "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+  "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
   "Champ : personnes de référence du ménage en emploi, 18-64 ans.\n",
   "Bi-actif : PR en emploi avec conjoint en emploi. Mono-actif : conjoint inactif ou au chômage."
 )
 
 pal_config <- c(
-  "Seul·e sans enfant"            = "#a6cee3",
-  "Parent seul avec enfant(s)"    = "#e31a1c",
-  "Couple bi-actif sans enfant"   = "#b2df8a",
-  "Couple bi-actif avec enf."     = "#33a02c",
-  "Couple mono-actif sans enfant" = "#fdbf6f",
-  "Couple mono-actif avec enf."   = "#ff7f00"
+  "Seul·e sans enfant"            = "#2674DD",
+  "Parent seul avec enfant(s)"    = "#08BAB7",
+  "Couple bi-actif sans enfant"   = "#E91422",
+  "Couple bi-actif avec enf."     = "#8D30D4",
+  "Couple mono-actif sans enfant" = "#757575",
+  "Couple mono-actif avec enf."   = "#D79700"
 )
 
 # ==============================================================================
@@ -77,7 +77,7 @@ tp_config_base <- tp_config_base |>
   mutate(config = factor(config, levels = config_levels))
 
 # ==============================================================================
-# 2. Figure A : taux de pauvreté par configuration (lignes, 2005-2023)
+# 2. Figure A : taux de pauvreté par configuration (lignes, 2005-2024)
 # ==============================================================================
 
 taux_config <- tp_config_base |>
@@ -99,13 +99,17 @@ g_tp3_taux_config <- ggplot(
 ) +
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.5) +
-  scale_colour_manual(values = pal_config, drop = FALSE) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_colour_manual(values = pal_config, drop = TRUE) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_y_continuous(labels = label_number(suffix = " %")) +
   labs(
-    y       = "Taux de pauvreté (%)",
+    y       = "taux de pauvreté (%)",
     colour  = NULL,
-    caption = caption_base
+    caption = paste0(
+      caption_base,
+      "\nCouple bi-actif sans enfant : échantillon insuffisant (moins de 50 travailleurs ",
+      "pauvres identifiés chaque année), non représenté."
+    )
   ) +
   theme_minimal(base_size = 12) +
   theme(
@@ -122,7 +126,7 @@ cat("tp3_taux_config : ok\n")
 # ==============================================================================
 
 annees_dispo <- unique(tp_config_base$annee)
-annees_cles  <- c(2010, 2015, 2019, 2023)[c(2010, 2015, 2019, 2023) %in% annees_dispo]
+annees_cles  <- c(2010, 2015, 2019, 2024)[c(2010, 2015, 2019, 2024) %in% annees_dispo]
 
 compo_tp <- tp_config_base |>
   filter(pauvre, annee %in% annees_cles) |>

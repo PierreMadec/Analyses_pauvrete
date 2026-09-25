@@ -6,8 +6,8 @@
 # enveloppe activité, minima sociaux).
 #
 # Figures produites :
-#   decompo_transferts_evol.rds    — effet amortisseur de chaque poste, 2005-2023
-#   decompo_transferts_config.rds  — décomposition par configuration, 2021-2023
+#   decompo_transferts_evol.rds    — effet amortisseur de chaque poste, 2005-2024
+#   decompo_transferts_config.rds  — décomposition par configuration, 2023-2024
 # ==============================================================================
 
 library(tidyverse)
@@ -87,13 +87,13 @@ g_evol <- ggplot(evol_long,
   geom_line_interactive(linewidth = 1.0) +
   geom_point_interactive(size = 2.0) +
   scale_colour_manual(values = pal_postes) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_y_continuous(labels = label_number(suffix = " pt")) +
   labs(
     x = NULL,
     y = "Points de pauvreté laborieuse amortis",
     colour = NULL,
-    caption = paste0("Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+    caption = paste0("Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
                      "Champ : PR en emploi 18-64 ans. Retraits indépendants (effets de premier ordre).")
   ) +
   theme_minimal(base_size = 12) +
@@ -103,10 +103,10 @@ g_evol <- ggplot(evol_long,
 
 saveRDS(g_evol, file.path(path_fig, "decompo_transferts_evol.rds"))
 
-# ── Figure 2 : décomposition par configuration (2021-2023) ───────────────────
+# ── Figure 2 : décomposition par configuration (2023-2024) ───────────────────
 
 config_decompo <- base |>
-  filter(annee >= 2021) |>
+  filter(annee >= 2023) |>
   group_by(groupe) |>
   summarise(
     tx_obs     = weighted.mean(pauvre_obs,       wprm, na.rm = TRUE),
@@ -116,8 +116,9 @@ config_decompo <- base |>
     effet_prec = weighted.mean(pauvre_sans_prec, wprm, na.rm = TRUE) - weighted.mean(pauvre_obs, wprm, na.rm = TRUE),
     .groups = "drop"
   ) |>
-  # Garder configurations avec taux > 2%
-  filter(tx_obs > 0.02) |>
+  # Garder configurations avec taux > 2%, exclure "Sans emploi" (effectifs
+  # trop faibles pour ce croisement — cf. figure 7 qui applique le même principe)
+  filter(tx_obs > 0.02, !grepl("Sans emploi", groupe)) |>
   mutate(
     groupe_lab = case_when(
       grepl("Famille monoparentale / Mono", groupe) ~ "Famille monoparentale\n(mono-active)",
@@ -133,20 +134,20 @@ config_decompo <- base |>
     poste_lab = case_when(
       poste == "effet_apt"  ~ "APL",
       poste == "effet_pfam" ~ "Prestations familiales",
-      poste == "effet_act"  ~ "Enveloppe activité",
+      poste == "effet_act"  ~ "Prime d'activité",
       poste == "effet_prec" ~ "Minima sociaux"
     ),
     poste_lab = factor(poste_lab, levels = c(
-      "Prestations familiales", "APL", "Enveloppe activité", "Minima sociaux"
+      "Prestations familiales", "APL", "Prime d'activité", "Minima sociaux"
     )),
     groupe_lab = reorder(groupe_lab, tx_obs)
   )
 
 pal_postes2 <- c(
-  "Prestations familiales" = "#1f78b4",
-  "APL"                    = "#33a02c",
-  "Enveloppe activité"     = "#ff7f00",
-  "Minima sociaux"         = "#984ea3"
+  "Prestations familiales" = "#2674DD",
+  "APL"                    = "#08BAB7",
+  "Prime d'activité"       = "#8D30D4",
+  "Minima sociaux"         = "#757575"
 )
 
 g_config <- ggplot(config_decompo,
@@ -157,9 +158,9 @@ g_config <- ggplot(config_decompo,
   scale_fill_manual(values = pal_postes2) +
   scale_x_continuous(labels = label_number(suffix = " pt")) +
   labs(
-    x = "Points de pauvreté laborieuse amortis",
+    x = "points de pauvreté laborieuse amortis",
     y = NULL, fill = NULL,
-    caption = paste0("Source : INSEE, ERFS 2021-2023, calculs de l'auteur.\n",
+    caption = paste0("Source : INSEE, ERFS 2023-2024, calculs de l'auteur.\n",
                      "Champ : PR en emploi 18-64 ans. Retraits indépendants.")
   ) +
   theme_minimal(base_size = 12) +

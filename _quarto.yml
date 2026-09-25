@@ -1,6 +1,10 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - "*.qmd"
+    - "*.md"
+    - "!CNLE/"
 
 execute:
   freeze: auto

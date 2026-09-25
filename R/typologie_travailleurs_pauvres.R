@@ -16,8 +16,8 @@
 # Champ : niveau de vie (pas de reste-à-vivre). Travailleurs pauvres uniquement.
 #
 # Figures produites (figure/) :
-#   tp_diag_config   — causes proximales par configuration (2021-2023)
-#   tp_diag_evol     — évolution des causes proximales dans le temps (2005-2023)
+#   tp_diag_config   — causes proximales par configuration (2022-2024)
+#   tp_diag_evol     — évolution des causes proximales dans le temps (2005-2024)
 #   tp_compo_evol    — évolution de la composition des travailleurs pauvres
 # ==============================================================================
 
@@ -69,17 +69,17 @@ theme_erfs <- function() {
           plot.caption = element_text(size = 8, colour = "grey50", hjust = 0),
           legend.position = "bottom", legend.title = element_blank())
 }
-pal_causes <- c("Temps partiel"            = "#1f78b4",
-                "Sous-emploi"              = "#a6cee3",
-                "Salaire ETP < SMIC"       = "#e31a1c",
-                "Un seul revenu d'activité" = "#6a3d9a",
-                "Enfants à charge"         = "#33a02c")
+pal_causes <- c("Temps partiel"            = "#2674DD",
+                "Sous-emploi"              = "#08BAB7",
+                "Salaire ETP < Smic"       = "#E91422",
+                "Un seul revenu d'activité" = "#8D30D4",
+                "Enfants à charge"         = "#757575")
 
 # ==============================================================================
-# Figure 1 : causes proximales par configuration (période récente 2021-2023)
+# Figure 1 : causes proximales par configuration (période récente 2022-2024)
 # ==============================================================================
 diag <- trav_pauvres |>
-  filter(annee %in% 2021:2023) |>
+  filter(annee %in% 2022:2024) |>
   mutate(mono = as.integer(biactivite != "Bi-actif" | typmen %in%
                              c("Personne seule", "Famille monoparentale")),
          enfants = as.integer(grepl("enfant", config) | config == "Famille monoparentale")) |>
@@ -87,7 +87,7 @@ diag <- trav_pauvres |>
   summarise(
     `Temps partiel`             = 100 * weighted.mean(temps_partiel, wprm, na.rm = TRUE),
     `Sous-emploi`               = 100 * weighted.mean(sousemploi, wprm, na.rm = TRUE),
-    `Salaire ETP < SMIC`        = 100 * weighted.mean(sal_etp < smic, wprm, na.rm = TRUE),
+    `Salaire ETP < Smic`        = 100 * weighted.mean(sal_etp < smic, wprm, na.rm = TRUE),
     `Un seul revenu d'activité` = 100 * weighted.mean(mono, wprm, na.rm = TRUE),
     `Enfants à charge`          = 100 * weighted.mean(enfants, wprm, na.rm = TRUE),
     part = sum(wprm),
@@ -109,10 +109,10 @@ g_diag <- ggplot(diag_long, aes(x = cause, y = pct, fill = cause)) +
   scale_fill_manual(values = pal_causes, guide = "none") +
   scale_y_continuous(labels = label_number(suffix = " %"), limits = c(0, 100)) +
   coord_flip() +
-  labs(y = "Part des travailleurs pauvres de la configuration concernés",
+  labs(y = "part des travailleurs pauvres de la configuration concernés",
        x = NULL,
        caption = paste0(
-         "Source : INSEE, ERFS 2021-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2022-2024, calculs de l'auteur.\n",
          "Champ : personnes de référence en emploi, 18-64 ans, ménage pauvre. ",
          "Salaire ETP = salaire annuel rapporté à un temps plein. SMIC net annuel temps plein.")) +
   theme_erfs() +
@@ -127,10 +127,16 @@ evol <- trav_pauvres |>
   group_by(annee) |>
   summarise(
     `Temps partiel`      = 100 * weighted.mean(temps_partiel, wprm, na.rm = TRUE),
+    # NB : le sous-emploi n'est pas repris ici. Sa mesure connaît une rupture
+    # de série nette en 2020-2021 (chute d'environ 20 % à 5 % dans l'ensemble
+    # des actifs occupés, cf. exploration), vraisemblablement liée à une
+    # redéfinition de l'enquête Emploi plutôt qu'à un choc économique réel ;
+    # une évolution temporelle serait trompeuse. La coupe 2022-2024 (fig-tp-diag)
+    # n'est pas affectée, la fenêtre étant interne à la période post-rupture.
     # Salaire ETP : la quotité (txtppred) n'existe qu'à partir de 2013 ; avant,
     # l'équivalent temps plein n'est pas reconstituable -> série non comparable,
-    # restreinte à 2013-2023 pour éviter un faux décrochage.
-    `Salaire ETP < SMIC` = ifelse(first(annee) >= 2013,
+    # restreinte à 2013-2024 pour éviter un faux décrochage.
+    `Salaire ETP < Smic` = ifelse(first(annee) >= 2013,
         100 * weighted.mean(sal_etp < smic, wprm, na.rm = TRUE), NA_real_),
     `Un seul revenu d'activité` = 100 * weighted.mean(
         as.integer(biactivite != "Bi-actif" |
@@ -147,11 +153,11 @@ g_evol <- ggplot(evol, aes(x = annee, y = pct, colour = cause, group = cause)) +
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.2) +
   scale_colour_manual(values = pal_causes) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_y_continuous(labels = label_number(suffix = " %")) +
   labs(y = "Part des travailleurs pauvres concernés", x = NULL,
        caption = paste0(
-         "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
          "Le salaire ETP n'est disponible qu'à partir de 2013 (quotité de temps partiel). ",
          "Champ : PR en emploi, 18-64 ans, ménage pauvre.")) +
   theme_erfs()
@@ -175,11 +181,11 @@ g_compo <- ggplot(compo, aes(x = annee, y = part, fill = config)) +
                        position = "stack", width = 0.9,
                        colour = "white", linewidth = 0.15) +
   scale_fill_brewer(palette = "Set2") +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_y_continuous(labels = label_number(suffix = " %"), expand = expansion(mult = c(0, 0.02))) +
   labs(y = "Composition des travailleurs pauvres (%)", x = NULL,
        caption = paste0(
-         "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
          "Champ : PR en emploi, 18-64 ans, ménage pauvre.")) +
   theme_erfs() +
   theme(legend.text = element_text(size = 8))

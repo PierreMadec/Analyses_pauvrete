@@ -2,10 +2,10 @@
 # soutien_bas_revenus.R
 #
 # Effet amortisseur des dispositifs de soutien aux BAS REVENUS D'ACTIVITÉ sur la
-# pauvreté laborieuse, reconstitués en une enveloppe cohérente 2005-2023 :
+# pauvreté laborieuse, reconstitués en une enveloppe cohérente 2005-2024 :
 #   - PPE  (Prime pour l'emploi)        : 2005-2015   [ppe]
 #   - RSA activité                      : 2009-2015   [m_rsa_actm]
-#   - Prime d'activité (PPA)            : 2016-2023   [ppa]
+#   - Prime d'activité (PPA)            : 2016-2024   [ppa]
 # La PPA (2016) remplace PPE + RSA activité : bascule nette, sans recouvrement.
 #
 # Contrefactuel : on retire l'enveloppe du niveau de vie et on recalcule le taux
@@ -81,7 +81,7 @@ serie_long <- serie |>
 
 # Étiquettes d'écart (effet amortisseur) à années clés
 etiq <- serie |>
-  filter(annee %in% c(2010, 2016, 2019, 2023)) |>
+  filter(annee %in% c(2010, 2016, 2019, 2024)) |>
   mutate(
     ymid    = (`Observé` + `Sans soutien activité`) / 2,
     label   = paste0("-", round(effet, 1), " pt"),
@@ -89,7 +89,7 @@ etiq <- serie |>
     data_id = paste0("effet_", annee)
   )
 
-pal_sc <- c("Sans soutien activité" = "#e31a1c", "Observé" = "#1f78b4")
+pal_sc <- c("Sans soutien activité" = "#E91422", "Observé" = "#2674DD")
 
 g_amort <- ggplot(serie_long, aes(x = annee, y = taux, colour = scenario, group = scenario)) +
   # repères de réforme
@@ -106,19 +106,19 @@ g_amort <- ggplot(serie_long, aes(x = annee, y = taux, colour = scenario, group 
               fill = "grey80", alpha = 0.45) +
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.3) +
-  geom_text_interactive(data = etiq, inherit.aes = FALSE,
-                        aes(x = annee, y = ymid, label = label,
-                            tooltip = tooltip, data_id = data_id),
-                        size = 3, fontface = "bold", colour = "grey25", hjust = -0.15) +
+  geom_point_interactive(data = etiq, inherit.aes = FALSE,
+                        aes(x = annee, y = ymid, tooltip = tooltip, data_id = data_id),
+                        alpha = 0, size = 6) +
   scale_colour_manual(values = pal_sc) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   scale_y_continuous(labels = label_number(suffix = " %")) +
   labs(
-    y = "Taux de pauvreté laborieuse (%)",
+    y = "taux de pauvreté laborieuse (%)",
     caption = paste0(
-      "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+      "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
       "Enveloppe soutien aux bas revenus d'activité : PPE (2005-2015) + RSA activité ",
-      "(2009-2015) + prime d'activité (2016-2023).\n",
+      "(2009-2015) + prime d'activité (2016-2024). Effet amortisseur : +0,9 pt en 2010, ",
+      "+2,0 pts en 2019.\n",
       "Contrefactuel : niveau de vie diminué de l'enveloppe. Champ : PR en emploi, 18-64 ans."
     )
   ) +
@@ -155,13 +155,13 @@ g_montant <- ggplot(montant, aes(x = annee, y = valeur)) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id),
                          colour = "#1f78b4", size = 2.3) +
   facet_wrap(~ indicateur, ncol = 1, scales = "free_y") +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2025, 2)) +
   expand_limits(y = 0) +
   labs(
     y = NULL,
     caption = paste0(
-      "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
-      "Enveloppe PPE (2005-2015) + RSA activité (2009-2015) + prime d'activité (2016-2023). ",
+      "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
+      "Enveloppe PPE (2005-2015) + RSA activité (2009-2015) + prime d'activité (2016-2024). ",
       "Champ : PR en emploi, 18-64 ans."
     )
   ) +
@@ -171,7 +171,7 @@ g_montant <- ggplot(montant, aes(x = annee, y = valeur)) +
 saveRDS(g_montant, file.path(path_fig, "soutien_enveloppe_montant.rds"))
 cat("soutien_enveloppe_montant : ok\n")
 
-# ── Effet amortisseur par configuration de ménage (2021-2023) ─────────────────
+# ── Effet amortisseur par configuration de ménage (2022-2024) ─────────────────
 lab_cfg <- c("Personne seule", "Famille monoparentale",
              "Couple mono-actif sans enfant", "Couple mono-actif avec enfant(s)",
              "Couple bi-actif")
@@ -183,7 +183,7 @@ parcfg <- base |>
     typmen == "Couple avec enfant(s)" & biactivite != "Bi-actif" ~ "Couple mono-actif avec enfant(s)",
     biactivite == "Bi-actif"                                     ~ "Couple bi-actif",
     TRUE ~ NA_character_)) |>
-  filter(!is.na(config), annee %in% 2021:2023) |>
+  filter(!is.na(config), annee %in% 2022:2024) |>
   group_by(config) |>
   summarise(
     `Observé`               = 100 * weighted.mean(nivviem     < seuil_std, wprm),
@@ -216,7 +216,7 @@ g_parcfg <- ggplot(parcfg_long, aes(x = config, y = taux, fill = scenario)) +
   coord_flip() +
   labs(x = NULL, y = "Taux de pauvreté laborieuse (%)",
        caption = paste0(
-         "Source : INSEE, ERFS 2021-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2022-2024, calculs de l'auteur.\n",
          "Effet amortisseur de l'enveloppe PPE + RSA activité + prime d'activité, par configuration. ",
          "Champ : PR en emploi, 18-64 ans.")) +
   theme_erfs()

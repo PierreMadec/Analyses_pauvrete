@@ -1,5 +1,5 @@
 ---
-title: "CNLE – Chiffrages Partie I"
+title: "CNLE – Chiffrages V1"
 subtitle: "Indicateurs de pauvreté monétaire et coût d'éradication"
 author:
   - name: "Pierre Madec"
@@ -13,13 +13,24 @@ format:
     toc-title: "Sommaire"
     number-sections: true
     embed-resources: true
-    code-fold: true
-    code-tools: true
     smooth-scroll: true
     theme: flatly
     fig-width: 10
     fig-height: 5
+  pdf:
+    documentclass: scrartcl
+    papersize: a4
+    geometry: [margin=2cm]
+    toc: true
+    toc-title: "Sommaire"
+    toc-depth: 2
+    number-sections: true
+    colorlinks: true
+    fig-width: 8
+    fig-height: 5
+    fig-pos: "H"
 execute:
+  echo: false
   message: false
   warning: false
 lang: fr
@@ -29,6 +40,10 @@ lang: fr
 library(tidyverse)
 library(ggiraph)
 library(gt)
+
+# Décimales à la française partout (tableaux gt déjà en dec_mark=",", ceci
+# aligne aussi les nombres insérés en ligne dans le texte via `r ...`).
+options(OutDec = ",")
 
 # ── Chargement des données ────────────────────────────────────────────────────
 data_all <- readRDS("../figure/data_all.rds")
@@ -46,6 +61,8 @@ mediane_ponderee <- function(x, w) {
     slice(1) |>
     pull(x)
 }
+
+`%||%` <- function(a, b) if (is.null(a)) b else a
 
 # Calcule taux/effectif (niveau individu) + intensité/coût (niveau ménage).
 indicateurs_pauvrete <- function(df_ind, seuils = c(0.40, 0.45, 0.50, 0.55, 0.60),
@@ -67,12 +84,14 @@ indicateurs_pauvrete <- function(df_ind, seuils = c(0.40, 0.45, 0.50, 0.55, 0.60
     ecart      <- sum(pmax(seuil - df_men$nivviem, 0) * df_men$nb_uci * df_men$wprm,
                       na.rm = TRUE)
     tibble(
-      seuil_pct = s * 100,
-      seuil_eur = round(seuil / 12),
-      taux      = round(taux, 1),
-      effectif  = round(effectif, 2),
-      intensite = round(intensite, 1),
-      cout_mds  = round(ecart / 1e9, 1)
+      seuil_pct   = s * 100,
+      seuil_eur   = round(seuil / 12),
+      taux        = round(taux, 1),
+      effectif    = round(effectif, 2),
+      # En unités, mais arrondi au millier (la précision de l'ERFS ne va pas au-delà)
+      effectif_n  = round(sum(df_ind$wprm[pauvre_ind], na.rm = TRUE) / 1e3) * 1e3,
+      intensite   = round(intensite, 1),
+      cout_mds    = round(ecart / 1e9, 1)
     )
   })
 }
@@ -102,14 +121,15 @@ show_girafe <- function(gg, width_svg = 10, height_svg = 5) {
 # Spanners dynamiques : les noms de colonnes (après rename) sont inspectés pour
 # regrouper automatiquement Seuil | Pauvreté monétaire | Profondeur & coût.
 # fmt_integer/fmt_number utilisent matches() pour correspondre aux noms FR.
-gt_cnle <- function(df, title = NULL, subtitle = NULL) {
+gt_cnle <- function(df, title = NULL, subtitle = NULL, source_note = NULL,
+                    spanners = TRUE) {
   cn <- colnames(df)
 
   tbl <- df |>
     gt() |>
     tab_header(title = title, subtitle = subtitle) |>
     tab_source_note(
-      source_note = md(glue::glue("**Source :** ERFS {annee_ref}, INSEE – calculs auteur."))
+      source_note = md(source_note %||% glue::glue("**Source :** ERFS {annee_ref}, INSEE – calculs auteur."))
     ) |>
     opt_stylize(style = 1, color = "blue") |>
     tab_options(
@@ -134,24 +154,45 @@ gt_cnle <- function(df, title = NULL, subtitle = NULL) {
       source_notes.font.size            = px(11)
     ) |>
     # Entiers sans décimale pour les colonnes « Seuil » (% et €/UC)
-    fmt_integer(columns = matches("^Seuil"), sep_mark = " ") |>
+    fmt_integer(columns = matches("^Seuil"), sep_mark = " ") |>
     # 1 décimale pour toutes les autres colonnes numériques
     fmt_number(
       columns  = where(is.numeric) & !matches("^Seuil"),
-      decimals = 1, sep_mark = " ", dec_mark = ","
+      decimals = 1, sep_mark = " ", dec_mark = ","
     ) |>
     tab_style(
-      style     = cell_text(color = "white", weight = "bold"),
+      style     = cell_text(color = if (is_html) "white" else "black", weight = "bold"),
       locations = cells_column_labels()
     ) |>
     tab_style(
-      style = cell_text(color = "white", weight = "bold"),
+      style = cell_text(color = if (is_html) "white" else "black", weight = "bold"),
       locations = cells_row_groups()
     ) |>
     cols_align(align = "center", columns = where(is.numeric)) |>
     cols_align(align = "left",   columns = where(is.character))
 
-  # ── Spanners dynamiques ───────────────────────────────────────────────────
+  # ── Sortie PDF ────────────────────────────────────────────────────────────
+  # longtable : le tableau reste à sa place dans le flux (sinon LaTeX le fait
+  # flotter en fin de section et il se retrouve détaché de son titre).
+  if (!is_html) {
+    tbl <- tab_options(tbl,
+      latex.use_longtable = TRUE,
+      latex.header_repeat = TRUE,   # en-têtes répétés si le tableau change de page
+      table.font.size     = px(9),
+      table.width         = "auto"
+    )
+    # Tableaux à libellés de colonnes longs (partie Ines, spanners = FALSE) :
+    # sans largeur imposée, LaTeX ne coupe pas les en-têtes et le tableau déborde
+    # de la page. Des largeurs fixes les font revenir à la ligne.
+    # (largeurs littérales : gt évalue le membre droit des formules hors de
+    #  cette fonction, une expression dépendant de `cn` n'y serait pas visible)
+    if (!spanners && length(cn) >= 5)
+      tbl <- cols_width(tbl, 1 ~ pct(16), everything() ~ pct(12))
+  }
+
+  # ── Spanners dynamiques (format « à la INSEE » — désactivables) ───────────
+  if (!spanners) return(tbl)
+
   seuil_cols      <- grep("^Seuil",             cn, value = TRUE)
   pauvrete_cols   <- grep("^(Taux|Effectif)",   cn, value = TRUE)
   profondeur_cols <- grep("^(Intensité|Coût)", cn, value = TRUE)
@@ -176,16 +217,114 @@ gt_cnle <- function(df, title = NULL, subtitle = NULL) {
   if (length(c(seuil_cols, pauvrete_cols, profondeur_cols)) > 0)
     tbl <- tab_style(
       tbl,
-      style     = cell_text(color = "white", weight = "bold", size = px(12)),
+      style     = cell_text(color = if (is_html) "white" else "black", weight = "bold", size = px(12)),
       locations = cells_column_spanners(everything())
     )
 
   tbl
 }
 
-seuils_trajectoire <- c(0.40, 0.45, 0.50, 0.55, 0.60)
+seuils_trajectoire <- c(0.50, 0.60)
 annee_ref <- 2023
+
+# ── Mise en forme « à la INSEE » : une ligne par modalité ─────────────────────
+# Reprend indicateurs_pauvrete() (taux au niveau individu, intensité + coût au
+# niveau ménage). Colonnes en deux blocs — « Pauvreté à 60 % » puis
+# « Pauvreté à 50 % » — chacun : Effectif (personnes), Taux (%), Intensité (%), Coût (Mds €).
+# Noms internes en minuscule (pauvres_60, …) pour ne pas déclencher les spanners
+# automatiques de gt_cnle ; les libellés d'affichage sont posés par cols_label().
+indic_wide <- function(df_ind, mediane_pop, min_obs = 50) {
+  if (is.null(df_ind) || nrow(df_ind) < min_obs) return(NULL)
+  w <- indicateurs_pauvrete(df_ind, seuils = c(0.50, 0.60), mediane_pop = mediane_pop)
+  g <- function(col, s) w[[col]][w$seuil_pct == s]
+  tibble(
+    pauvres_60 = g("effectif_n", 60), taux_60 = g("taux", 60),
+    int_60     = g("intensite", 60),  cout_60 = g("cout_mds", 60),
+    pauvres_50 = g("effectif_n", 50), taux_50 = g("taux", 50),
+    int_50     = g("intensite", 50),  cout_50 = g("cout_mds", 50)
+  )
+}
+
+# Habillage commun des tableaux : libellés dupliqués + 2 spanners 60 % / 50 %.
+# lab_60 / lab_50 : libellés des spanners, à adapter quand le seuil n'est pas le
+# seuil relatif de l'année (onglets « seuil ancré » et « écart »).
+# ecart = TRUE : le tableau contient des différences -> signe explicite partout.
+habiller_blocs <- function(gt_tbl,
+                           lab_60 = "**Pauvreté à 60 %**",
+                           lab_50 = "**Pauvreté à 50 %**",
+                           ecart  = FALSE) {
+  # En PDF, les libellés longs font déborder les 9 colonnes hors de la page :
+  # on les raccourcit et les unités partent en note de tableau.
+  lib <- if (is_html)
+    c("Effectif (personnes)", "Taux (%)", "Intensité (%)", "Coût (Mds €)")
+  else
+    c("Effectif", "Taux", "Intensité", "Coût")
+
+  tbl <- gt_tbl |>
+    cols_label(
+      pauvres_60 = lib[1], taux_60 = lib[2], int_60 = lib[3], cout_60 = lib[4],
+      pauvres_50 = lib[1], taux_50 = lib[2], int_50 = lib[3], cout_50 = lib[4]
+    ) |>
+    # Effectifs en entiers (le fmt_number à 1 décimale de gt_cnle est écrasé ici)
+    fmt_integer(columns = c(pauvres_60, pauvres_50), sep_mark = " ")
+
+  # Onglet « écart » : mêmes colonnes, mais des différences -> on réaffiche tout
+  # avec le signe (ces fmt_* passent après les précédents et les écrasent).
+  if (ecart) {
+    tbl <- tbl |>
+      fmt_integer(columns = c(pauvres_60, pauvres_50),
+                  sep_mark = " ", force_sign = TRUE) |>
+      fmt_number(columns  = c(taux_60, int_60, cout_60, taux_50, int_50, cout_50),
+                 decimals = 1, sep_mark = " ", dec_mark = ",", force_sign = TRUE)
+  }
+
+  if (!is_html)
+    tbl <- tab_source_note(tbl, md(
+      "*Unités :* effectif en personnes, taux et intensité en %, coût en milliards d'euros."
+    ))
+
+  tbl |>
+    tab_spanner(label = md(lab_60),
+                columns = c(pauvres_60, taux_60, int_60, cout_60)) |>
+    tab_spanner(label = md(lab_50),
+                columns = c(pauvres_50, taux_50, int_50, cout_50)) |>
+    tab_style(
+      style     = cell_text(color = if (is_html) "white" else "black", weight = "bold", size = px(12)),
+      locations = cells_column_spanners(everything())
+    )
+}
+
+# Écart entre deux tableaux de même structure (relatif − ancré) : les colonnes
+# numériques sont soustraites, les colonnes de libellés reprises telles quelles.
+tab_ecart <- function(tab_rel, tab_anc) {
+  stopifnot(identical(dim(tab_rel), dim(tab_anc)),
+            identical(names(tab_rel), names(tab_anc)))
+  num <- names(tab_rel)[vapply(tab_rel, is.numeric, logical(1))]
+  lab <- setdiff(names(tab_rel), num)
+  # Les lignes doivent décrire les mêmes modalités dans le même ordre
+  stopifnot(identical(as.data.frame(tab_rel[lab]), as.data.frame(tab_anc[lab])))
+  out <- tab_rel
+  out[num] <- tab_rel[num] - tab_anc[num]
+  out
+}
+
+# Table INSEE-style : lignes = modalités d'une variable, + sous-totaux de groupe
+indic_par_modalite <- function(df, var, mediane_pop, labels = NULL) {
+  niveaux <- if (!is.null(labels)) labels else
+    as.character(sort(unique(na.omit(df[[var]]))))
+  purrr::map_dfr(niveaux, function(niv) {
+    sub <- df[!is.na(df[[var]]) & df[[var]] == niv, ]
+    res <- indic_wide(sub, mediane_pop)
+    if (is.null(res)) return(NULL)
+    dplyr::bind_cols(tibble(Modalité = niv), res)
+  })
+}
 ```
+
+Ce document présente, en deux temps, les éléments transmis au CNLE : un état des
+lieux de la pauvreté monétaire en France à partir de l'ERFS (@sec-indicateurs),
+puis des simulations de réforme du RSA et de la prime d'activité réalisées avec
+le modèle de microsimulation Ines (@sec-simulation).
 
 ::: {.callout-note appearance="minimal"}
 **Source :** Enquête Revenus Fiscaux et Sociaux (ERFS), INSEE, millésime `r annee_ref`.
@@ -197,645 +336,718 @@ Les taux et effectifs sont calculés au niveau individuel (proportion d'individu
 l'intensité et le coût d'éradication au niveau ménage.
 :::
 
----
+# Indicateurs de pauvreté monétaire {#sec-indicateurs}
 
-# Indicateurs de pauvreté monétaire et coût d'éradication {#sec-indicateurs}
+Trois tableaux de synthèse, construits sur le modèle des publications de l'INSEE
+(*France, portrait social* ; *Revenus et patrimoine des ménages*) : taux et
+intensité de la pauvreté aux seuils de 50 % et 60 % du niveau de vie médian,
+déclinés par configuration familiale (selon la présence d'un revenu d'activité
+dans le ménage) puis par âge et situation de handicap. Chaque tableau se lit sous
+trois angles[, accessibles par les onglets]{.content-visible when-format="html"}[, présentés successivement]{.content-visible when-format="pdf"} : au **seuil relatif** de l'année, au
+**seuil ancré sur 2014** (à pouvoir d'achat constant), et en **écart** entre les
+deux.
 
-## Population totale
+```{r prep-constat}
+df_ref <- data_all |> filter(annee == annee_ref)
+mediane_nationale <- mediane_ponderee(df_ref$nivviem, df_ref$wprm)
 
-```{r indic-total}
-df_total <- data_all |>
-  filter(annee == annee_ref)
+seuil_50_mens <- round(0.50 * mediane_nationale / 12)
+seuil_60_mens <- round(0.60 * mediane_nationale / 12)
 
-mediane_nationale <- mediane_ponderee(df_total$nivviem, df_total$wprm)
+# ── Seuil ancré ───────────────────────────────────────────────────────────────
+# Médiane de l'année d'ancrage portée jusqu'à annee_ref par l'IPC : elle définit
+# un seuil à pouvoir d'achat constant. Passée comme « médiane de référence » à
+# indicateurs_pauvrete(), elle produit les seuils ancrés à 60 % et à 50 %.
+annee_ancre <- 2014
 
-indic_total <- indicateurs_pauvrete(df_total,
-  seuils      = seuils_trajectoire,
-  mediane_pop = mediane_nationale)
+mediane_ancre_origine <- mediane_ponderee(
+  data_all$nivviem[data_all$annee == annee_ancre],
+  data_all$wprm[data_all$annee   == annee_ancre]
+)
+coef_ipc       <- unname(ipc[as.character(annee_ref)] / ipc[as.character(annee_ancre)])
+mediane_ancree <- mediane_ancre_origine * coef_ipc
 
-# Statistiques clés (commentaires inline)
-i60_tot       <- indic_total |> filter(seuil_pct == 60)
-taux_ref_60   <- i60_tot$taux
-eff_ref_60    <- i60_tot$effectif
-cout_ref_60   <- i60_tot$cout_mds
-int_ref_60    <- i60_tot$intensite
-seuil_eur_60  <- i60_tot$seuil_eur
+seuil_50_anc_mens <- round(0.50 * mediane_ancree / 12)
+seuil_60_anc_mens <- round(0.60 * mediane_ancree / 12)
+gain_median_reel  <- round(100 * (mediane_nationale / mediane_ancree - 1), 1)
 
-indic_total |>
-  rename(
-    `Seuil (% médiane)`          = seuil_pct,
-    `Seuil mensuel (€/UC)`       = seuil_eur,
-    `Taux de pauvreté (%)`       = taux,
-    `Effectif (millions)`        = effectif,
-    `Intensité (%)`              = intensite,
-    `Coût d'éradication (Mds €)` = cout_mds
-  ) |>
+indic_anc   <- indicateurs_pauvrete(df_ref, seuils = c(0.50, 0.60),
+                                    mediane_pop = mediane_ancree)
+taux_anc_60 <- indic_anc$taux[indic_anc$seuil_pct == 60]
+taux_anc_50 <- indic_anc$taux[indic_anc$seuil_pct == 50]
+int_anc_60  <- indic_anc$intensite[indic_anc$seuil_pct == 60]
+cout_anc_60 <- indic_anc$cout_mds[indic_anc$seuil_pct == 60]
+eff_anc_60  <- indic_anc$effectif[indic_anc$seuil_pct == 60]
+
+# ── Habillage des trois onglets (relatif / ancré / écart) ─────────────────────
+st_rel <- glue::glue("France métropolitaine, {annee_ref} — seuils de 60 % et 50 % du niveau de vie médian de l'année")
+st_anc <- glue::glue("France métropolitaine, {annee_ref} — seuil ancré sur {annee_ancre}, porté par l'IPC (pouvoir d'achat constant)")
+st_ec  <- glue::glue("France métropolitaine, {annee_ref} — écart entre seuil relatif et seuil ancré sur {annee_ancre}")
+
+lab_anc_60 <- glue::glue("**Seuil ancré 60 % ({annee_ancre})**")
+lab_anc_50 <- glue::glue("**Seuil ancré 50 % ({annee_ancre})**")
+lab_ec_60  <- "**Écart à 60 % (relatif − ancré)**"
+lab_ec_50  <- "**Écart à 50 % (relatif − ancré)**"
+```
+
+Le niveau de vie médian `r annee_ref` s'établit à `r format(round(mediane_nationale), big.mark = " ")` € par an et par unité de consommation, soit un seuil de pauvreté mensuel de **`r format(seuil_50_mens, big.mark = " ")` €/UC** à 50 % et **`r format(seuil_60_mens, big.mark = " ")` €/UC** à 60 %.
+
+::: {.callout-note appearance="minimal"}
+**Seuil relatif, seuil ancré.** Le seuil relatif se déplace avec la médiane : si le
+niveau de vie médian progresse, le seuil monte, et une population dont le revenu
+réel est inchangé bascule mécaniquement dans la pauvreté. Le **seuil ancré**
+neutralise ce déplacement — on fige le seuil de `r annee_ancre` et on le porte
+jusqu'à `r annee_ref` par l'indice des prix à la consommation, à pouvoir d'achat
+constant. Entre `r annee_ancre` et `r annee_ref`, le niveau de vie médian a
+progressé de **`r gain_median_reel` %** en euros constants : le seuil ancré à 60 %
+s'établit à **`r format(seuil_60_anc_mens, big.mark = " ")` €/UC** par mois contre
+**`r format(seuil_60_mens, big.mark = " ")` €/UC** pour le seuil relatif
+(**`r format(seuil_50_anc_mens, big.mark = " ")` €/UC** contre
+**`r format(seuil_50_mens, big.mark = " ")` €/UC** à 50 %). D'une version à l'autre,
+seul le seuil change : champ, millésime et indicateurs sont identiques.
+:::
+
+## Ensemble de la population — taux et intensité aux seuils de 50 % et 60 % {#sec-ensemble}
+
+```{r tbl-ensemble}
+indic_ens <- indicateurs_pauvrete(
+  df_ref, seuils = c(0.50, 0.60), mediane_pop = mediane_nationale
+)
+
+taux_50 <- indic_ens$taux[indic_ens$seuil_pct == 50]
+taux_60 <- indic_ens$taux[indic_ens$seuil_pct == 60]
+int_50  <- indic_ens$intensite[indic_ens$seuil_pct == 50]
+int_60  <- indic_ens$intensite[indic_ens$seuil_pct == 60]
+eff_60  <- indic_ens$effectif[indic_ens$seuil_pct == 60]
+cout_60 <- indic_ens$cout_mds[indic_ens$seuil_pct == 60]
+
+# Tableau d'ensemble, paramétré par la médiane de référence : médiane courante
+# (seuil relatif) ou médiane d'une année de base portée par l'IPC (seuil ancré).
+tab_ensemble_data <- function(mediane_pop) {
+  bind_cols(
+    tibble(champ = "France métropolitaine"),
+    indic_wide(df_ref, mediane_pop)
+  )
+}
+
+tab_ensemble_gt <- function(tab, sous_titre,
+                            lab_60 = "**Pauvreté à 60 %**",
+                            lab_50 = "**Pauvreté à 50 %**",
+                            titre  = "Pauvreté monétaire de l'ensemble de la population",
+                            ecart  = FALSE) {
+tab |>
   gt_cnle(
-    title    = "Indicateurs de pauvreté monétaire – ensemble de la population",
-    subtitle = glue::glue("France métropolitaine, {annee_ref}")
+    title    = titre,
+    subtitle = sous_titre
   ) |>
-  tab_style(
-    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
-    locations = cells_body(
-      columns = `Intensité (%)`,
-      rows    = `Seuil (% médiane)` %in% c(40, 45, 55)
-    )
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (% médiane)` == 60)
+  cols_label(champ = "") |>
+  habiller_blocs(lab_60, lab_50, ecart) |>
+  tab_footnote(
+    footnote  = md(if (ecart)
+      "Différence d'effectifs entre les deux seuils ; chaque effectif est arrondi au millier."
+      else
+      "Nombre de personnes vivant dans un ménage dont le niveau de vie est inférieur au seuil ; arrondi au millier."),
+    locations = cells_column_labels(columns = pauvres_60)
   ) |>
   tab_footnote(
-    footnote  = md("L'intensité mesure l'écart moyen entre le niveau de vie des ménages pauvres et le seuil, rapporté à ce dernier. Elle est grisée aux seuils non conventionnels."),
-    locations = cells_column_labels(columns = `Intensité (%)`)
+    footnote  = md("Écart moyen entre le niveau de vie des ménages pauvres et le seuil, rapporté au seuil (niveau ménage)."),
+    locations = cells_column_labels(columns = int_60)
+  ) |>
+  tab_footnote(
+    footnote  = md("Transfert théorique amenant chaque ménage pauvre exactement au seuil, sans comportement endogène ni frais de gestion."),
+    locations = cells_column_labels(columns = cout_60)
   )
+}
+
+tab_ens_rel <- tab_ensemble_data(mediane_nationale)
+tab_ens_anc <- tab_ensemble_data(mediane_ancree)
+tab_ens_ec  <- tab_ecart(tab_ens_rel, tab_ens_anc)
 ```
 
-Au seuil de **60 % de la médiane** — seuil retenu dans les comparaisons européennes et par l'INSEE —, le taux de pauvreté s'élève à **`r taux_ref_60` %** de la population en `r annee_ref`, soit environ **`r eff_ref_60` millions** de personnes vivant dans un ménage dont le niveau de vie mensuel est inférieur à `r format(seuil_eur_60, big.mark = " ")` €/UC. Avec une intensité de `r int_ref_60` %, le coût théorique d'éradication de la pauvreté — montant de transferts ciblés nécessaires pour amener chaque ménage exactement au seuil — atteint **`r cout_ref_60` milliards d'euros**. Les seuils plus bas (40–55 %) identifient un noyau de grande pauvreté nettement plus réduit en effectif, mais dont l'intensité plus élevée traduit un éloignement plus marqué du seuil.
+::: {.panel-tabset}
 
+### Seuil relatif
 
-## Par composition familiale (sans revenu professionnel) {#sec-typmen-sans}
+```{r tbl-ensemble-rel}
+tab_ensemble_gt(tab_ens_rel, st_rel)
+```
 
-```{r indic-sans-revpro}
-typmen_niveaux <- c(
-  "Personne seule", "Couple sans enfant",
-  "Couple avec enfant(s)", "Famille monoparentale", "Autre"
+### Seuil ancré 2014
+
+```{r tbl-ensemble-anc}
+tab_ensemble_gt(tab_ens_anc, st_anc, lab_anc_60, lab_anc_50)
+```
+
+### Écart
+
+```{r tbl-ensemble-ec}
+tab_ensemble_gt(
+  tab_ens_ec, st_ec, lab_ec_60, lab_ec_50,
+  titre = "Écart entre seuil relatif et seuil ancré — ensemble de la population",
+  ecart = TRUE
 )
-
-# Individus dont le ménage n'a aucun revenu professionnel
-df_sans_revpro <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(
-    acteu_pr %in% c("Chomage", "Inactif") | is.na(acteu_pr),
-    acteu_cj %in% c("Chomage", "Inactif") | is.na(acteu_cj)
-  )
-
-indic_sans <- map_dfr(typmen_niveaux, function(tm) {
-  df_sub <- df_sans_revpro |> filter(typmen == tm)
-  if (nrow(df_sub) < 50) return(NULL)
-  indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
-    mutate(typmen = tm, .before = 1)
-})
-
-# Statistiques clés
-total_sans_60   <- indicateurs_pauvrete(df_sans_revpro, seuils = 0.60, mediane_pop = mediane_nationale)
-taux_sans_60    <- total_sans_60$taux
-eff_sans_60     <- total_sans_60$effectif
-cout_sans_60    <- total_sans_60$cout_mds
-taux_mono_sans  <- indic_sans |>
-  filter(seuil_pct == 60, typmen == "Famille monoparentale") |>
-  pull(taux)
-taux_seul_sans  <- indic_sans |>
-  filter(seuil_pct == 60, typmen == "Personne seule") |>
-  pull(taux)
-
-indic_sans |>
-  rename(
-    `Type de ménage`       = typmen,
-    `Seuil (%)`            = seuil_pct,
-    `Seuil mensuel (€/UC)` = seuil_eur,
-    `Taux (%)`             = taux,
-    `Effectif (M)`         = effectif,
-    `Intensité (%)`        = intensite,
-    `Coût (Mds €)`         = cout_mds
-  ) |>
-  gt_cnle(
-    title    = "Pauvreté des ménages sans revenu professionnel",
-    subtitle = "Par type de ménage"
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (%)` == 60)
-  ) |>
-  tab_style(
-    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
-    locations = cells_body(
-      columns = `Intensité (%)`,
-      rows    = `Seuil (%)` %in% c(40, 45, 55)
-    )
-  )
 ```
 
-Les ménages sans aucun revenu professionnel — dont ni la personne de référence ni le/la conjoint·e n'est en emploi — présentent des taux de pauvreté structurellement très élevés, quelle que soit la configuration familiale. Au seuil de 60 %, ce sous-groupe représente **`r eff_sans_60` millions** de personnes pour un coût d'éradication de **`r cout_sans_60` milliards d'euros**. Les familles monoparentales sont la configuration la plus exposée (**`r taux_mono_sans` %** au seuil de 60 %), devant les personnes seules (`r taux_seul_sans` %) ; leur pauvreté reflète la combinaison d'une inactivité ou d'un chômage et d'une charge familiale non partagée.
+:::
 
+Au seuil de **60 %**, **`r taux_60` %** de la population vit sous le seuil de pauvreté en `r annee_ref`, soit **`r eff_60` millions** de personnes, pour une intensité de `r int_60` % et un coût d'éradication de **`r cout_60` milliards d'euros**. Au seuil de **50 %**, le taux revient à **`r taux_50` %** mais l'intensité monte à `r int_50` % : le noyau de pauvreté le plus profond est plus resserré en effectif, mais nettement plus éloigné du seuil.
 
-## Par composition familiale (avec revenu professionnel) {#sec-typmen-avec}
+À pouvoir d'achat de `r annee_ancre`, le taux revient à **`r taux_anc_60` %** — soit
+`r eff_anc_60` millions de personnes — et le coût d'éradication à
+**`r cout_anc_60` milliards d'euros**. L'écart de `r round(taux_60 - taux_anc_60, 1)` points
+mesure la part du taux de pauvreté officiel qui tient au **déplacement du seuil**
+plutôt qu'à une dégradation des niveaux de vie du bas de la distribution.
+L'intensité, elle, est plus **élevée** au seuil ancré (`r int_anc_60` % contre
+`r int_60` %) : la population qui reste sous ce seuil est plus profondément pauvre.
 
-```{r indic-avec-revpro}
-# Individus en emploi (niveau individuel, pas seulement la PR)
-df_avec_revpro <- data_all |>
-  filter(annee == annee_ref, acteu_ind == "Emploi")
+## Par configuration familiale, avec ou sans revenu d'activité {#sec-config}
 
-indic_avec <- map_dfr(typmen_niveaux, function(tm) {
-  df_sub <- df_avec_revpro |> filter(typmen == tm)
-  if (nrow(df_sub) < 50) return(NULL)
-  indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
-    mutate(typmen = tm, .before = 1)
-})
+```{r tbl-config}
+typmen_ordre <- c("Personne seule", "Famille monoparentale",
+                  "Couple sans enfant", "Couple avec enfant(s)", "Autres ménages")
 
-# Statistiques clés
-total_avec_60  <- indicateurs_pauvrete(df_avec_revpro, seuils = 0.60, mediane_pop = mediane_nationale)
-taux_avec_60   <- total_avec_60$taux
-eff_avec_60    <- total_avec_60$effectif
-cout_avec_60   <- total_avec_60$cout_mds
-taux_mono_avec <- indic_avec |>
-  filter(seuil_pct == 60, typmen == "Famille monoparentale") |>
-  pull(taux)
-
-indic_avec |>
-  rename(
-    `Type de ménage`       = typmen,
-    `Seuil (%)`            = seuil_pct,
-    `Seuil mensuel (€/UC)` = seuil_eur,
-    `Taux (%)`             = taux,
-    `Effectif (M)`         = effectif,
-    `Intensité (%)`        = intensite,
-    `Coût (Mds €)`         = cout_mds
-  ) |>
-  gt_cnle(
-    title    = "Pauvreté des ménages avec revenu professionnel (travailleurs pauvres)",
-    subtitle = "Par type de ménage"
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (%)` == 60)
-  ) |>
-  tab_style(
-    style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
-    locations = cells_body(
-      columns = `Intensité (%)`,
-      rows    = `Seuil (%)` %in% c(40, 45, 55)
-    )
-  )
-```
-
-Parmi les individus en emploi, **`r taux_avec_60` %** vivent sous le seuil de 60 % de la médiane, soit **`r eff_avec_60` million(s)** de travailleurs pauvres, pour un coût d'éradication estimé à **`r cout_avec_60` milliard(s) d'euros**. Ce phénomène reflète principalement des salaires faibles, du temps partiel subi ou des contrats courts. Les familles monoparentales avec un actif en emploi demeurent surexposées (**`r taux_mono_avec` %**), la charge d'enfant à charge unique amplifiant le risque de pauvreté même en présence d'un revenu du travail.
-
-
-## Travailleurs pauvres : statut d'occupation, PCS, temps de travail et contrat {#sec-tp-detail}
-
-```{r indic-tp-detail}
-# Individus en emploi avec leurs propres caractéristiques
-df_tp <- data_all |>
-  filter(annee == annee_ref, acteu_ind == "Emploi") |>
+df_cfg <- df_ref |>
   mutate(
-    temps_travail = case_when(
-      tpstrav == 1 ~ "Temps plein",
-      tpstrav == 2 ~ "Temps partiel",
-      TRUE ~ NA_character_
+    config = case_when(
+      typmen == "Autre" ~ "Autres ménages",
+      TRUE              ~ as.character(typmen)
+    ),
+    config = factor(config, levels = typmen_ordre),
+    # Revenu d'activité au niveau ménage : PR ou conjoint·e en emploi
+    rev_activite = if_else(
+      (acteu_pr %in% "Emploi") | (acteu_cj %in% "Emploi"),
+      "Ménage avec revenu d'activité", "Ménage sans revenu d'activité"
     )
-  )
+  ) |>
+  filter(!is.na(config))
 
-# Fonction générique : taux/coût par modalité + ligne Total
-indic_var <- function(df, var, label_var) {
-  niveaux <- sort(na.omit(unique(df[[var]])))
-  lignes <- map_dfr(niveaux, function(niv) {
-    df_sub <- df |> filter(.data[[var]] == niv)
-    if (nrow(df_sub) < 50) return(NULL)
-    indicateurs_pauvrete(df_sub, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
-      mutate(variable = label_var, modalite = niv, .before = 1)
-  })
-  df_ok <- df |> filter(!is.na(.data[[var]]))
-  total <- indicateurs_pauvrete(df_ok, seuils = seuils_trajectoire, mediane_pop = mediane_nationale) |>
-    mutate(variable = label_var, modalite = "— Total", .before = 1)
-  bind_rows(lignes, total)
+tab_config_data <- function(mediane_pop) {
+  bloc_config <- function(sous_champ, etiquette) {
+    base <- if (is.null(sous_champ)) df_cfg else
+      df_cfg |> filter(rev_activite == sous_champ)
+    modalites <- indic_par_modalite(base, "config", mediane_pop,
+                                    labels = typmen_ordre)
+    ensemble  <- indic_wide(base, mediane_pop)
+    bind_rows(
+      bind_cols(tibble(Modalité = "Ensemble"), ensemble),
+      modalites
+    ) |>
+      mutate(Groupe = etiquette, .before = 1)
+  }
+  bind_rows(
+    bloc_config(NULL,                            "Ensemble des ménages"),
+    bloc_config("Ménage avec revenu d'activité", "Ménages avec revenu d'activité"),
+    bloc_config("Ménage sans revenu d'activité", "Ménages sans revenu d'activité")
+  )
 }
 
-indic_tp_detail <- bind_rows(
-  indic_var(df_tp, "statut_occ",    "Statut d'occupation"),
-  indic_var(df_tp, "pcs_cat",       "PCS"),
-  indic_var(df_tp, "temps_travail", "Temps de travail"),
-  indic_var(df_tp, "type_contrat",  "Type de contrat")
-)
+tab_config <- tab_config_data(mediane_nationale)
 
-# Statistiques clés
-taux_tpartiel_60 <- indic_tp_detail |>
-  filter(variable == "Temps de travail", modalite == "Temps partiel", seuil_pct == 60) |>
-  pull(taux)
-taux_tplein_60 <- indic_tp_detail |>
-  filter(variable == "Temps de travail", modalite == "Temps plein", seuil_pct == 60) |>
-  pull(taux)
+# Statistiques clés (seuil 60 %)
+t_mono_sans <- tab_config |>
+  filter(Groupe == "Ménages sans revenu d'activité", Modalité == "Famille monoparentale") |>
+  pull(taux_60)
+t_mono_avec <- tab_config |>
+  filter(Groupe == "Ménages avec revenu d'activité", Modalité == "Famille monoparentale") |>
+  pull(taux_60)
 
-indic_tp_detail |>
-  rename(
-    `Variable`             = variable,
-    `Modalité`             = modalite,
-    `Seuil (%)`            = seuil_pct,
-    `Seuil mensuel (€/UC)` = seuil_eur,
-    `Taux (%)`             = taux,
-    `Effectif (M)`         = effectif,
-    `Intensité (%)`        = intensite,
-    `Coût (Mds €)`         = cout_mds
-  ) |>
+tab_config_gt <- function(tab, sous_titre,
+                          lab_60 = "**Pauvreté à 60 %**",
+                          lab_50 = "**Pauvreté à 50 %**",
+                          titre  = "Taux et intensité de la pauvreté par configuration familiale",
+                          ecart  = FALSE) {
+  grp <- tab$Groupe
+tab |>
+  select(-Groupe) |>
   gt_cnle(
-    title    = "Pauvreté des travailleurs pauvres",
-    subtitle = "Par statut d'occupation, PCS, temps de travail et type de contrat"
+    title    = titre,
+    subtitle = sous_titre
   ) |>
-  tab_row_group(label = "Type de contrat",     rows = Variable == "Type de contrat") |>
-  tab_row_group(label = "Temps de travail",    rows = Variable == "Temps de travail") |>
-  tab_row_group(label = "PCS",                 rows = Variable == "PCS") |>
-  tab_row_group(label = "Statut d'occupation", rows = Variable == "Statut d'occupation") |>
-  cols_hide(Variable) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (%)` == 60)
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#eef4fb"), cell_text(weight = "bold", style = "italic")),
-    locations = cells_body(rows = Modalité == "— Total")
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold", style = "italic")),
-    locations = cells_body(rows = Modalité == "— Total" & `Seuil (%)` == 60)
-  )
-```
-
-La pauvreté parmi les actifs en emploi varie fortement selon les conditions de travail. Au seuil de 60 %, les travailleurs à **temps partiel** affichent un taux de **`r taux_tpartiel_60` %**, contre **`r taux_tplein_60` %** pour ceux à temps plein — un écart qui reflète à la fois des rémunérations plus faibles et une plus grande fréquence du sous-emploi subi. De même, les contrats courts (CDD, intérim) concentrent une pauvreté plus marquée que les CDI, et les ouvriers présentent des taux nettement supérieurs à ceux des cadres.
-
-
-## Allocataires de l'AAH {#sec-aah-indic}
-
-```{r indic-aah}
-df_aah <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(!is.na(prest_precarite_hand) & prest_precarite_hand > 0)
-
-indic_aah <- if (nrow(df_aah) > 50) {
-  indicateurs_pauvrete(df_aah, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
-} else NULL
-
-# Statistiques clés
-i_aah_60    <- if (!is.null(indic_aah)) indic_aah |> filter(seuil_pct == 60) else NULL
-taux_aah_60 <- if (!is.null(i_aah_60)) i_aah_60$taux    else NA_real_
-eff_aah_60  <- if (!is.null(i_aah_60)) i_aah_60$effectif else NA_real_
-cout_aah_60 <- if (!is.null(i_aah_60)) i_aah_60$cout_mds else NA_real_
-
-if (!is.null(indic_aah)) {
-  indic_aah |>
-    rename(
-      `Seuil (%)`            = seuil_pct,
-      `Seuil mensuel (€/UC)` = seuil_eur,
-      `Taux (%)`             = taux,
-      `Effectif (M)`         = effectif,
-      `Intensité (%)`        = intensite,
-      `Coût (Mds €)`         = cout_mds
-    ) |>
-    gt_cnle(title = "Pauvreté des ménages allocataires de l'AAH") |>
-    tab_style(
-      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-      locations = cells_body(rows = `Seuil (%)` == 60)
-    ) |>
-    tab_style(
-      style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
-      locations = cells_body(columns = `Intensité (%)`, rows = `Seuil (%)` %in% c(40, 45, 55))
-    )
-}
-```
-
-Les allocataires de l'Allocation aux adultes handicapés (AAH) présentent un taux de pauvreté structurellement élevé : le montant de la prestation, indexé sur l'évolution du SMIC, reste historiquement inférieur au seuil de pauvreté à 60 %. Au seuil de référence, **`r taux_aah_60` %** des allocataires vivent sous le seuil, soit **`r eff_aah_60` million(s)** de personnes pour un coût d'éradication estimé à **`r cout_aah_60` milliard(s) d'euros**. L'intensité élevée observée reflète un éloignement important du seuil, conséquence directe du différentiel persistant entre le montant de l'AAH et le niveau de vie médian.
-
-
-## Bénéficiaires d'une pension d'invalidité {#sec-inv-indic}
-
-```{r indic-inv}
-df_inv <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(!is.na(csgpidm) & csgpidm > 0)
-
-indic_inv <- if (nrow(df_inv) > 50) {
-  indicateurs_pauvrete(df_inv, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
-} else NULL
-
-# Statistiques clés
-i_inv_60    <- if (!is.null(indic_inv)) indic_inv |> filter(seuil_pct == 60) else NULL
-taux_inv_60 <- if (!is.null(i_inv_60)) i_inv_60$taux     else NA_real_
-eff_inv_60  <- if (!is.null(i_inv_60)) i_inv_60$effectif  else NA_real_
-cout_inv_60 <- if (!is.null(i_inv_60)) i_inv_60$cout_mds  else NA_real_
-
-if (!is.null(indic_inv)) {
-  indic_inv |>
-    rename(
-      `Seuil (%)`            = seuil_pct,
-      `Seuil mensuel (€/UC)` = seuil_eur,
-      `Taux (%)`             = taux,
-      `Effectif (M)`         = effectif,
-      `Intensité (%)`        = intensite,
-      `Coût (Mds €)`         = cout_mds
-    ) |>
-    gt_cnle(
-      title    = "Pauvreté des ménages bénéficiaires d'une pension d'invalidité",
-      subtitle = md("*Proxy : CSG sur pensions d'invalidité > 0*")
-    ) |>
-    tab_style(
-      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-      locations = cells_body(rows = `Seuil (%)` == 60)
-    ) |>
-    tab_style(
-      style     = list(cell_fill(color = "#eeeeee"), cell_text(color = "#aaaaaa")),
-      locations = cells_body(columns = `Intensité (%)`, rows = `Seuil (%)` %in% c(40, 45, 55))
-    )
-}
-```
-
-::: {.callout-warning appearance="minimal"}
-**Note :** Les bénéficiaires d'une pension d'invalidité sont identifiés par un proxy (CSG sur pensions d'invalidité > 0) ; ce champ ne couvre pas l'ensemble des pensions de catégorie 1 à 3 et peut inclure quelques faux positifs.
-:::
-
-Les bénéficiaires d'une pension d'invalidité se trouvent fréquemment dans des situations de pauvreté, la pension se substituant partiellement à un revenu d'activité sans en atteindre le niveau. Au seuil de 60 %, le taux de pauvreté de ce sous-groupe s'élève à **`r taux_inv_60` %**, représentant **`r eff_inv_60` million(s)** de personnes et un coût d'éradication de **`r cout_inv_60` milliard(s) d'euros**.
-
-
-## Allocataires du minimum vieillesse {#sec-minvieux}
-
-```{r indic-minvieux}
-df_mv <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(!is.na(prest_precarite_vieil) & prest_precarite_vieil > 0)
-
-indic_mv <- if (nrow(df_mv) > 50) {
-  indicateurs_pauvrete(df_mv, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
-} else NULL
-
-# Statistiques clés
-i_mv_60    <- if (!is.null(indic_mv)) indic_mv |> filter(seuil_pct == 60) else NULL
-taux_mv_60 <- if (!is.null(i_mv_60)) i_mv_60$taux     else NA_real_
-eff_mv_60  <- if (!is.null(i_mv_60)) i_mv_60$effectif  else NA_real_
-cout_mv_60 <- if (!is.null(i_mv_60)) i_mv_60$cout_mds  else NA_real_
-
-if (!is.null(indic_mv)) {
-  indic_mv |>
-    rename(
-      `Seuil (%)`            = seuil_pct,
-      `Seuil mensuel (€/UC)` = seuil_eur,
-      `Taux (%)`             = taux,
-      `Effectif (M)`         = effectif,
-      `Intensité (%)`        = intensite,
-      `Coût (Mds €)`         = cout_mds
-    ) |>
-    gt_cnle(
-      title = "Pauvreté des ménages allocataires du minimum vieillesse (ASPA/ASV)"
-    ) |>
-    tab_style(
-      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-      locations = cells_body(rows = `Seuil (%)` == 60)
-    )
-}
-```
-
-Les allocataires du minimum vieillesse (ASPA/ASV) constituent un sous-groupe dont le revenu est, par construction, au voisinage immédiat du seuil de pauvreté à 50 %. Au seuil de 60 %, le taux de pauvreté s'établit à **`r taux_mv_60` %**, pour un effectif de **`r eff_mv_60` million(s)** de personnes. Le coût d'éradication (**`r cout_mv_60` milliard(s) d'euros**) est relativement contenu au regard du taux, car ces ménages se situent généralement juste en dessous du seuil.
-
-
----
-
-## Familles monoparentales {#sec-mono}
-
-```{r cout-mono}
-df_mono <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(typmen == "Famille monoparentale")
-
-indic_mono <- indicateurs_pauvrete(df_mono,
-  seuils      = seuils_trajectoire,
-  mediane_pop = mediane_nationale)
-
-# Statistiques clés
-i_mono_60   <- indic_mono |> filter(seuil_pct == 60)
-taux_mono_60  <- i_mono_60$taux
-eff_mono_60   <- i_mono_60$effectif
-cout_mono_60  <- i_mono_60$cout_mds
-int_mono_60   <- i_mono_60$intensite
-
-indic_mono |>
-  rename(
-    `Seuil (%)`                  = seuil_pct,
-    `Seuil mensuel (€/UC)`       = seuil_eur,
-    `Taux (%)`                   = taux,
-    `Effectif (M)`               = effectif,
-    `Intensité (%)`              = intensite,
-    `Coût d'éradication (Mds €)` = cout_mds
-  ) |>
-  gt_cnle(
-    title = "Coût d'éradication – familles monoparentales"
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (%)` == 60)
-  )
-```
-
-Les familles monoparentales figurent parmi les configurations familiales les plus touchées par la pauvreté monétaire. Au seuil de 60 %, **`r taux_mono_60` %** d'entre elles vivent sous le seuil, soit **`r eff_mono_60` million(s)** de personnes (adultes et enfants). Avec une intensité de `r int_mono_60` %, le coût d'éradication s'élève à **`r cout_mono_60` milliard(s) d'euros** — un montant qui illustre l'ampleur du soutien financier nécessaire pour compenser l'absence de second revenu et les charges liées à la garde des enfants.
-
-
-## Ménages avec enfants mineurs {#sec-enfants}
-
-```{r cout-enfants}
-df_enfants <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(typmen %in% c("Couple avec enfant(s)", "Famille monoparentale") |
-           nb_enfants != "0 enfant")
-
-indic_enfants <- indicateurs_pauvrete(df_enfants,
-  seuils      = seuils_trajectoire,
-  mediane_pop = mediane_nationale)
-
-# Statistiques clés
-i_enf_60    <- indic_enfants |> filter(seuil_pct == 60)
-taux_enf_60 <- i_enf_60$taux
-eff_enf_60  <- i_enf_60$effectif
-cout_enf_60 <- i_enf_60$cout_mds
-
-indic_enfants |>
-  rename(
-    `Seuil (%)`                  = seuil_pct,
-    `Seuil mensuel (€/UC)`       = seuil_eur,
-    `Taux (%)`                   = taux,
-    `Effectif (M)`               = effectif,
-    `Intensité (%)`              = intensite,
-    `Coût d'éradication (Mds €)` = cout_mds
-  ) |>
-  gt_cnle(
-    title = "Coût d'éradication – ménages avec enfants mineurs"
-  ) |>
-  tab_style(
-    style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-    locations = cells_body(rows = `Seuil (%)` == 60)
-  )
-```
-
-Les ménages avec enfants mineurs représentent un sous-ensemble large, qui recoupe en partie les familles monoparentales. Au seuil de 60 %, le taux de pauvreté s'élève à **`r taux_enf_60` %**, soit **`r eff_enf_60` millions** de personnes (adultes et enfants confondus). Le coût d'éradication de **`r cout_enf_60` milliards d'euros** est le plus important de tous les sous-groupes analysés, en raison de l'ampleur des effectifs concernés. Ces chiffres rappellent que la pauvreté des enfants reste l'un des défis majeurs des politiques de redistribution.
-
-
-## Seniors ni en emploi ni à la retraite {#sec-seniors}
-
-```{r cout-seniors}
-# PR âgée de 55 ans et +, hors emploi, sans pension de retraite (proxy : csgrstdm == 0)
-df_seniors <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(
-    age_num >= 55,
-    acteu_pr %in% c("Chomage", "Inactif"),
-    is.na(csgrstdm) | csgrstdm == 0
-  )
-
-indic_seniors <- if (nrow(df_seniors) > 50) {
-  indicateurs_pauvrete(df_seniors, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
-} else NULL
-
-# Statistiques clés
-i_sen_60    <- if (!is.null(indic_seniors)) indic_seniors |> filter(seuil_pct == 60) else NULL
-taux_sen_60 <- if (!is.null(i_sen_60)) i_sen_60$taux     else NA_real_
-eff_sen_60  <- if (!is.null(i_sen_60)) i_sen_60$effectif  else NA_real_
-cout_sen_60 <- if (!is.null(i_sen_60)) i_sen_60$cout_mds  else NA_real_
-
-if (!is.null(indic_seniors)) {
-  indic_seniors |>
-    rename(
-      `Seuil (%)`                  = seuil_pct,
-      `Seuil mensuel (€/UC)`       = seuil_eur,
-      `Taux (%)`                   = taux,
-      `Effectif (M)`               = effectif,
-      `Intensité (%)`              = intensite,
-      `Coût d'éradication (Mds €)` = cout_mds
-    ) |>
-    gt_cnle(
-      title = "Coût d'éradication – seniors (55 ans et +) ni en emploi ni à la retraite"
-    ) |>
-    tab_style(
-      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-      locations = cells_body(rows = `Seuil (%)` == 60)
-    )
-}
-```
-
-Les seniors de 55 ans et plus ni en emploi ni à la retraite constituent une « zone grise » du système de protection sociale : trop âgés pour retrouver facilement un emploi, ils n'ont pas encore accès à une pension de retraite et peuvent ne percevoir que des minima sociaux. Au seuil de 60 %, **`r taux_sen_60` %** de ce sous-groupe vit sous le seuil, représentant **`r eff_sen_60` million(s)** de personnes pour un coût d'éradication de **`r cout_sen_60` milliard(s) d'euros**.
-
-
-## Jeunes hors étudiants (18-29 ans) {#sec-jeunes}
-
-```{r cout-jeunes}
-df_jeunes <- data_all |>
-  filter(annee == annee_ref) |>
-  filter(age_num >= 18, age_num <= 29)
-
-indic_jeunes <- if (nrow(df_jeunes) > 50) {
-  indicateurs_pauvrete(df_jeunes, seuils = seuils_trajectoire, mediane_pop = mediane_nationale)
-} else NULL
-
-# Statistiques clés
-i_jeu_60    <- if (!is.null(indic_jeunes)) indic_jeunes |> filter(seuil_pct == 60) else NULL
-taux_jeu_60 <- if (!is.null(i_jeu_60)) i_jeu_60$taux     else NA_real_
-eff_jeu_60  <- if (!is.null(i_jeu_60)) i_jeu_60$effectif  else NA_real_
-cout_jeu_60 <- if (!is.null(i_jeu_60)) i_jeu_60$cout_mds  else NA_real_
-
-if (!is.null(indic_jeunes)) {
-  indic_jeunes |>
-    rename(
-      `Seuil (%)`                  = seuil_pct,
-      `Seuil mensuel (€/UC)`       = seuil_eur,
-      `Taux (%)`                   = taux,
-      `Effectif (M)`               = effectif,
-      `Intensité (%)`              = intensite,
-      `Coût d'éradication (Mds €)` = cout_mds
-    ) |>
-    gt_cnle(
-      title    = "Coût d'éradication – jeunes (18-29 ans)",
-      subtitle = md("*Hors étudiants non identifiables dans l'ERFS – résultats à interpréter avec prudence*")
-    ) |>
-    tab_style(
-      style = list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold")),
-      locations = cells_body(rows = `Seuil (%)` == 60)
-    )
-}
-```
-
-::: {.callout-warning appearance="minimal"}
-**Note méthodologique :** L'ERFS ne permet pas d'identifier les étudiants vivant chez leurs parents
-ni les aides parentales non déclarées. Ces résultats ne peuvent pas être produits avec Ines.
-:::
-
-Les 18-29 ans présentent un taux de pauvreté de **`r taux_jeu_60` %** au seuil de 60 %, soit **`r eff_jeu_60` million(s)** de personnes pour un coût d'éradication de **`r cout_jeu_60` milliard(s) d'euros**. Ces chiffres sont à interpréter avec prudence : l'ERFS n'identifie pas les étudiants hébergés chez leurs parents dont les ressources propres sont faibles mais qui bénéficient d'un soutien familial non déclaré. Le taux observé surestime donc probablement la pauvreté « réelle » de cette tranche d'âge au sens des conditions de vie.
-
-
-## Récapitulatif au seuil de 60 % {#sec-recap}
-
-```{r cout-recap-tbl}
-sous_groupes <- list(
-  "Population totale"                     = df_total,
-  "Familles monoparentales"               = df_mono,
-  "Ménages avec enfants mineurs"          = df_enfants,
-  "Allocataires AAH"                      = df_aah,
-  "Bénéficiaires pension d'invalidité"    = df_inv,
-  "Seniors hors emploi/retraite (55+)"   = df_seniors,
-  "Jeunes (18-29 ans)"                   = df_jeunes
-)
-
-recap <- imap_dfr(sous_groupes, function(df, nom) {
-  if (is.null(df) || nrow(df) < 50) return(NULL)
-  indicateurs_pauvrete(df, seuils = 0.60, mediane_pop = mediane_nationale) |>
-    mutate(sous_groupe = nom, .before = 1)
-})
-
-recap |>
-  select(sous_groupe, taux, effectif, intensite, cout_mds) |>
-  rename(
-    `Sous-groupe`                      = sous_groupe,
-    `Taux de pauvreté (%)`             = taux,
-    `Effectif (millions de personnes)` = effectif,
-    `Intensité (%)`                    = intensite,
-    `Coût d'éradication (Mds €)`       = cout_mds
-  ) |>
-  gt_cnle(
-    title    = "Récapitulatif – pauvreté monétaire et coût d'éradication",
-    subtitle = glue::glue("Seuil de 60 % du niveau de vie médian, {annee_ref}")
-  ) |>
+  tab_row_group(label = "Ménages sans revenu d'activité",
+                rows = grp == "Ménages sans revenu d'activité") |>
+  tab_row_group(label = "Ménages avec revenu d'activité",
+                rows = grp == "Ménages avec revenu d'activité") |>
+  tab_row_group(label = "Ensemble des ménages",
+                rows = grp == "Ensemble des ménages") |>
+  cols_label(Modalité = "") |>
+  habiller_blocs(lab_60, lab_50, ecart) |>
   tab_style(
     style = list(cell_fill(color = "#eef4fb"), cell_text(weight = "bold")),
-    locations = cells_body(rows = `Sous-groupe` == "Population totale")
+    locations = cells_body(rows = Modalité == "Ensemble")
+  ) |>
+  tab_style(
+    style = cell_text(indent = px(14)),
+    locations = cells_body(columns = Modalité, rows = Modalité != "Ensemble")
   ) |>
   tab_footnote(
-    footnote  = md("Taux de référence national, calculé sur l'ensemble de la population."),
-    locations = cells_body(columns = `Taux de pauvreté (%)`, rows = `Sous-groupe` == "Population totale")
+    footnote  = md("Revenu d'activité du ménage approché par l'emploi de la personne de référence ou de son conjoint (variable *acteu*) ; les revenus d'indépendants sans statut « en emploi » déclaré ne sont pas captés."),
+    locations = cells_row_groups(groups = c("Ménages avec revenu d'activité", "Ménages sans revenu d'activité"))
   )
+}
+
+tab_cfg_anc <- tab_config_data(mediane_ancree)
+tab_cfg_ec  <- tab_ecart(tab_config, tab_cfg_anc)
 ```
 
-```{r cout-recap-graph}
-#| echo: false
-g_recap <- recap |>
-  filter(sous_groupe != "Population totale") |>
+::: {.panel-tabset}
+
+### Seuil relatif
+
+```{r tbl-config-rel}
+tab_config_gt(tab_config, st_rel)
+```
+
+### Seuil ancré 2014
+
+```{r tbl-config-anc}
+tab_config_gt(tab_cfg_anc, st_anc, lab_anc_60, lab_anc_50)
+```
+
+### Écart
+
+```{r tbl-config-ec}
+tab_config_gt(
+  tab_cfg_ec, st_ec, lab_ec_60, lab_ec_50,
+  titre = "Écart entre seuil relatif et seuil ancré — par configuration familiale",
+  ecart = TRUE
+)
+```
+
+:::
+
+La configuration familiale reste le premier déterminant du risque de pauvreté. En l'absence de tout revenu d'activité dans le ménage, les familles monoparentales affichent un taux de **`r t_mono_sans` %** au seuil de 60 % ; la présence d'un revenu d'activité le ramène à **`r t_mono_avec` %**, sans l'annuler — la charge d'enfant portée par un seul adulte continue d'exposer à la pauvreté même en emploi. À l'inverse, un couple avec deux revenus d'activité est presque toujours au-dessus du seuil.
+
+## Par âge et situation de handicap {#sec-age-handicap}
+
+```{r tbl-age-handicap}
+df_ah <- df_ref |>
   mutate(
-    sous_groupe = fct_reorder(sous_groupe, cout_mds),
-    tooltip = paste0(
-      sous_groupe, "\n",
-      "Taux de pauvreté : ", taux, " %\n",
-      "Effectif : ", effectif, " M de personnes\n",
-      "Coût d'éradication : ", cout_mds, " Mds €"
-    ),
-    data_id = paste0("recap_", row_number())
-  ) |>
-  ggplot(aes(x = sous_groupe, y = cout_mds, fill = sous_groupe)) +
-  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id),
-                       width = 0.6, show.legend = FALSE) +
-  geom_text(aes(label = paste0(cout_mds, " Mds €")), hjust = -0.1, size = 3.3) +
-  coord_flip() +
-  scale_fill_manual(values = c(
-    "Familles monoparentales"              = "#d7191c",
-    "Ménages avec enfants mineurs"         = "#f17c00",
-    "Allocataires AAH"                      = "#756bb1",
-    "Bénéficiaires pension d'invalidité"  = "#9e67ab",
-    "Seniors hors emploi/retraite (55+)"  = "#2c7bb6",
-    "Jeunes (18-29 ans)"                  = "#1a9641"
-  )) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.25))) +
-  labs(
-    x = NULL,
-    y = "Coût d'éradication (milliards d'euros courants)",
-    caption = glue::glue("Source : ERFS {annee_ref}, INSEE – calculs auteur. Seuil à 60 % de la médiane.")
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    panel.grid.major.y = element_blank(),
-    plot.caption = element_text(size = 10, color = "grey50"),
-    axis.text = element_text(size = 11)
+    tranche_age = factor(case_when(
+      age_num <  18 ~ "Moins de 18 ans",
+      age_num <= 29 ~ "18-29 ans",
+      age_num <= 64 ~ "30-64 ans",
+      age_num >= 65 ~ "65 ans et plus"
+    ), levels = c("Moins de 18 ans", "18-29 ans", "30-64 ans", "65 ans et plus")),
+    handicap_lbl = case_when(
+      handicap_ind %in% TRUE  ~ "En situation de handicap ou d'invalidité",
+      handicap_ind %in% FALSE ~ "Sans reconnaissance de handicap ou d'invalidité",
+      TRUE                    ~ NA_character_
+    )
   )
 
-show_girafe(g_recap)
+tab_ah_data <- function(mediane_pop) {
+  bloc_age <- indic_par_modalite(
+    df_ah, "tranche_age", mediane_pop,
+    labels = c("Moins de 18 ans", "18-29 ans", "30-64 ans", "65 ans et plus")
+  ) |>
+    mutate(Groupe = "Âge", .before = 1)
+
+  bloc_hand <- indic_par_modalite(
+    df_ah, "handicap_lbl", mediane_pop,
+    labels = c("En situation de handicap ou d'invalidité",
+               "Sans reconnaissance de handicap ou d'invalidité")
+  ) |>
+    mutate(Groupe = "Situation de handicap (18 ans ou plus)", .before = 1)
+
+  ens_ah <- bind_cols(
+    tibble(Groupe = "Ensemble", Modalité = "Ensemble"),
+    indic_wide(df_ref, mediane_pop)
+  )
+
+  bind_rows(ens_ah, bloc_age, bloc_hand)
+}
+
+tab_ah <- tab_ah_data(mediane_nationale)
+
+t_hand   <- tab_ah$taux_60[tab_ah$Modalité == "En situation de handicap ou d'invalidité"]
+t_nohand <- tab_ah$taux_60[tab_ah$Modalité == "Sans reconnaissance de handicap ou d'invalidité"]
+t_enf    <- tab_ah$taux_60[tab_ah$Modalité == "Moins de 18 ans"]
+t_65     <- tab_ah$taux_60[tab_ah$Modalité == "65 ans et plus"]
+
+tab_ah_gt <- function(tab, sous_titre,
+                      lab_60 = "**Pauvreté à 60 %**",
+                      lab_50 = "**Pauvreté à 50 %**",
+                      titre  = "Taux et intensité de la pauvreté par âge et situation de handicap",
+                      ecart  = FALSE) {
+  grp <- tab$Groupe
+tab |>
+  select(-Groupe) |>
+  gt_cnle(
+    title    = titre,
+    subtitle = sous_titre
+  ) |>
+  tab_row_group(label = "Situation de handicap (18 ans ou plus)",
+                rows = grp == "Situation de handicap (18 ans ou plus)") |>
+  tab_row_group(label = "Âge",
+                rows = grp == "Âge") |>
+  tab_row_group(label = "Ensemble",
+                rows = grp == "Ensemble") |>
+  cols_label(Modalité = "") |>
+  habiller_blocs(lab_60, lab_50, ecart) |>
+  tab_style(
+    style = list(cell_fill(color = "#eef4fb"), cell_text(weight = "bold")),
+    locations = cells_body(rows = Modalité == "Ensemble")
+  ) |>
+  tab_footnote(
+    footnote  = md("**Situation de handicap ou d'invalidité** : personne de 18 ans ou plus déclarant une reconnaissance administrative de handicap (y compris AAH), la perception de l'AAH ou d'une pension d'invalidité (variables ADMHANDR / AAH / INVALID de l'ERFS, disponibles depuis 2021 ; 2023 pour INVALID). L'ERFS ne comporte pas l'indicateur GALI « limité dans les activités »."),
+    locations = cells_row_groups(groups = "Situation de handicap (18 ans ou plus)")
+  )
+}
+
+tab_ah_anc <- tab_ah_data(mediane_ancree)
+tab_ah_ec  <- tab_ecart(tab_ah, tab_ah_anc)
 ```
+
+::: {.panel-tabset}
+
+### Seuil relatif
+
+```{r tbl-ah-rel}
+tab_ah_gt(tab_ah, st_rel)
+```
+
+### Seuil ancré 2014
+
+```{r tbl-ah-anc}
+tab_ah_gt(tab_ah_anc, st_anc, lab_anc_60, lab_anc_50)
+```
+
+### Écart
+
+```{r tbl-ah-ec}
+tab_ah_gt(
+  tab_ah_ec, st_ec, lab_ec_60, lab_ec_50,
+  titre = "Écart entre seuil relatif et seuil ancré — par âge et situation de handicap",
+  ecart = TRUE
+)
+```
+
+:::
+
+::: {.callout-note appearance="minimal"}
+**Note.** L'ERFS ne pose pas la question GALI (« limité depuis au moins six mois, à cause d'un problème de santé, dans les activités que les gens font habituellement »). La ligne « situation de handicap ou d'invalidité » repose donc sur la **reconnaissance administrative** (handicap, AAH, pension d'invalidité), disponible dans l'enquête depuis 2021 : elle sous-estime la population en limitation d'activité non reconnue.
+:::
+
+Le risque de pauvreté décroît avec l'âge : **`r t_enf` %** des moins de 18 ans vivent sous le seuil de 60 %, contre **`r t_65` %** des 65 ans et plus. La situation de handicap ou d'invalidité constitue un facteur de surexposition marqué : **`r t_hand` %** des personnes de 18 ans ou plus concernées sont pauvres au seuil de 60 %, soit près du double des **`r t_nohand` %** observés pour les autres.
+
+# Simulations — hausse du RSA socle et de la prime d'activité (modèle Ines) {#sec-simulation}
+
+::: {.callout-note appearance="minimal"}
+**Source :** modèle de microsimulation Ines (Insee-Drees-Cnaf), variantes CNLE,
+législation `anleg = 2024`. Simulation d'une hausse **proportionnelle** du RSA
+socle et de la prime d'activité (PA), de +10 % à +50 %, à comportements inchangés
+(pas de bouclage sur l'offre de travail). Fichier de résultats :
+`chiffrages_cnle_pct_*.xlsx`, produit par `Variantes/CNLE_pct/lancer.R` (dépôt
+`ines-2024`).
+
+Le taux de pauvreté « avant réforme » d'Ines (14,3 % au seuil de 60 %) diffère
+légèrement de celui du constat ERFS (@sec-ensemble, 15,4 %) : millésime simulé
+(ERFS 2022 vieillie à la législation 2024), champ de la redistribution d'Ines
+(hors ménages étudiants, revenu disponible positif ; environ 64,3 millions de
+personnes) et calcul du revenu disponible propre au modèle. **C'est l'écart
+avant/après, non le niveau absolu, qui porte le diagnostic.**
+:::
+
+Les tableaux précédents décrivent la pauvreté observée dans l'ERFS ; cette partie
+simule l'effet d'un des leviers les plus immédiats — revaloriser le RSA et la
+PA. Elle en mesure l'effet d'abord sur **l'ensemble de la population**, puis sur
+le **champ des bénéficiaires actuels** du RSA et de la PA, et détaille le **coût
+budgétaire** associé.
+
+```{r prep-diagnostic}
+# Résultats agrégés (ensemble de la population), variante "forfait" — pm_rsa et
+# pm_forf_pa relevés de X %, pente de la PA inchangée.
+diag_ensemble <- tibble::tribble(
+  ~hausse, ~seuil, ~taux_avant, ~taux_apres_fige, ~delta_fige, ~delta_recalc, ~cout_net_md, ~sorties_k, ~gagnants_m,
+  10, 50,  7.84,  7.20, -0.63, -0.56,  6.3,  357, 16.24,
+  10, 60, 14.31, 13.33, -0.98, -0.86,  6.3,  552, 16.24,
+  20, 50,  7.84,  6.74, -1.10, -0.95, 13.2,  608, 18.52,
+  20, 60, 14.31, 12.45, -1.87, -1.53, 13.2,  987, 18.52,
+  30, 50,  7.84,  6.33, -1.50, -1.21, 20.5,  777, 20.15,
+  30, 60, 14.31, 11.66, -2.65, -2.06, 20.5, 1327, 20.15,
+  40, 50,  7.84,  5.85, -1.98, -1.46, 28.2,  938, 21.72,
+  40, 60, 14.31, 11.08, -3.23, -2.42, 28.2, 1556, 21.72,
+  50, 50,  7.84,  5.36, -2.47, -1.58, 36.2, 1014, 23.08,
+  50, 60, 14.31, 10.56, -3.76, -2.60, 36.2, 1671, 23.08
+)
+
+# Répartition du Δ taux figé au seuil de 60 %, par configuration familiale
+diag_config <- tibble::tribble(
+  ~hausse, ~`Personne seule`, ~`Famille monoparentale`, ~`Couple sans enfant`, ~`Couple avec enfant(s)`, ~`Autres ménages`, ~Ensemble,
+  10, -0.33, -1.84, -0.23, -1.41, -1.96, -0.98,
+  20, -0.66, -3.53, -0.40, -2.72, -3.04, -1.87,
+  30, -0.94, -5.24, -0.55, -3.88, -3.68, -2.65,
+  40, -1.04, -6.85, -0.64, -4.67, -4.56, -3.23,
+  50, -1.23, -8.93, -0.69, -5.25, -4.85, -3.76
+)
+
+# Coût net (Md€), même répartition, hausse de +50 %
+diag_cout50 <- tibble::tribble(
+  ~Configuration, ~`Coût net (Mds €)`, ~`Part du coût`,
+  "Personne seule",           8.49, 8.49/36.2,
+  "Famille monoparentale",    7.73, 7.73/36.2,
+  "Couple sans enfant",       3.52, 3.52/36.2,
+  "Couple avec enfant(s)",   14.40, 14.40/36.2,
+  "Autres ménages",           2.07, 2.07/36.2
+)
+
+# ── Champ des BÉNÉFICIAIRES actuels (ménage percevant RSA > 0 ou PA > 0 dans la
+#    législation actuelle) — ≈ 16,0 millions de personnes. Variante "forfait".
+diag_benef <- tibble::tribble(
+  ~hausse, ~taux_avant, ~taux_apres_fige, ~delta_fige, ~delta_recalc, ~int_avant, ~delta_int, ~cout_benef_md,
+  10, 34.72, 30.90,  -3.82,  -3.56, 23.98, -0.59,  5.7,
+  20, 34.72, 27.57,  -7.15,  -6.44, 23.98, -1.27, 11.5,
+  30, 34.72, 24.63, -10.09,  -8.87, 23.98, -1.74, 17.2,
+  40, 34.72, 22.47, -12.25, -10.81, 23.98, -2.16, 23.0,
+  50, 34.72, 20.69, -14.03, -12.04, 23.98, -2.59, 28.6
+)
+
+# Effectif des bénéficiaires par configuration (millions de personnes, seuil 60 %)
+diag_benef_effectif <- tibble::tribble(
+  ~Configuration, ~`Effectif (millions)`, ~`Taux de pauvreté avant (%)`,
+  "Personne seule",        2.11, 36.15,
+  "Famille monoparentale", 3.68, 36.98,
+  "Couple sans enfant",    1.04, 31.87,
+  "Couple avec enfant(s)", 7.74, 35.53,
+  "Autres ménages",        1.40, 24.25
+)
+
+# Δ taux figé au seuil de 60 %, champ bénéficiaires, par configuration
+diag_benef_config <- tibble::tribble(
+  ~hausse, ~`Personne seule`, ~`Famille monoparentale`, ~`Couple sans enfant`, ~`Couple avec enfant(s)`, ~`Autres ménages`,
+  10, -1.89,  -3.13,  -3.45,  -4.83, -3.28,
+  20, -3.55,  -5.90,  -6.00,  -9.25, -5.07,
+  30, -5.03,  -8.59,  -8.27, -13.15, -6.15,
+  40, -5.50, -11.32,  -9.46, -15.75, -7.62,
+  50, -6.54, -14.69, -10.31, -17.36, -7.96
+)
+
+taux_ref_60_diag <- diag_ensemble$taux_avant[diag_ensemble$seuil == 60][1]
+
+# Part du coût qui va aux bénéficiaires actuels vs à de nouveaux ménages (+50 %)
+cout_total_50   <- diag_ensemble$cout_net_md[diag_ensemble$hausse == 50 & diag_ensemble$seuil == 60]
+cout_benef_50   <- diag_benef$cout_benef_md[diag_benef$hausse == 50]
+part_benef_50   <- cout_benef_50 / cout_total_50
+gagnants_50     <- diag_ensemble$gagnants_m[diag_ensemble$hausse == 50 & diag_ensemble$seuil == 60]
+benef_reste_50  <- round(diag_benef$taux_apres_fige[diag_benef$hausse == 50], 1)
+```
+
+## Un rendement décroissant, et un seuil qui s'auto-inflate {#sec-diag-rendement}
+
+```{r tbl-diag-ensemble}
+diag_ensemble |>
+  filter(seuil == 60) |>
+  select(-seuil) |>
+  left_join(diag_ensemble |> filter(seuil == 50) |> select(hausse, delta_fige_50 = delta_fige, delta_recalc_50 = delta_recalc),
+            by = "hausse") |>
+  transmute(
+    `Hausse RSA/PA`          = paste0("+", hausse, " %"),
+    `Taux avant (%)`         = taux_avant,
+    `Δ 60 % — figé (pt)`     = delta_fige,
+    `Δ 60 % — recalculé (pt)` = delta_recalc,
+    `Δ 50 % — figé (pt)`     = delta_fige_50,
+    `Δ 50 % — recalculé (pt)` = delta_recalc_50,
+    `Coût net (Mds €)`       = cout_net_md,
+    `Sorties de pauvreté (milliers, seuil 60 %)` = sorties_k,
+    `Gagnants (millions)`    = gagnants_m
+  ) |>
+  gt_cnle(
+    title       = "Effet d'une hausse proportionnelle du RSA socle et de la PA",
+    subtitle    = "Ensemble de la population, seuil figé vs recalculé — modèle Ines, législation 2024",
+    source_note = md("**Source :** modèle Ines (Insee-Drees-Cnaf), variantes CNLE — calculs auteur."),
+    spanners    = FALSE
+  ) |>
+  tab_footnote(
+    footnote  = md("**Figé** : mesuré au seuil de la législation actuelle. **Recalculé** : mesuré au seuil après réforme (la médiane se déplace mécaniquement quand on relève les minima sociaux)."),
+    locations = cells_column_labels(columns = c(`Δ 60 % — figé (pt)`, `Δ 60 % — recalculé (pt)`))
+  )
+```
+
+```{r graph-diag-seuil}
+#| echo: false
+#| fig-cap: "Divergence entre l'effet mesuré au seuil figé et au seuil recalculé, à mesure que la hausse du RSA/PA s'amplifie (seuil 60 %)."
+g_diag_seuil <- diag_ensemble |>
+  filter(seuil == 60) |>
+  select(hausse, `Seuil figé` = delta_fige, `Seuil recalculé` = delta_recalc) |>
+  pivot_longer(-hausse, names_to = "mesure", values_to = "delta") |>
+  mutate(
+    tooltip = paste0(mesure, " — +", hausse, " % : ", sprintf("%+.2f", delta), " pt"),
+    data_id = paste0(mesure, "_", hausse)
+  ) |>
+  ggplot(aes(x = hausse, y = delta, colour = mesure, group = mesure)) +
+  geom_line_interactive(linewidth = 1.1) +
+  geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.6) +
+  geom_hline(yintercept = 0, linewidth = 0.4, colour = "grey40") +
+  scale_x_continuous(breaks = c(10, 20, 30, 40, 50), labels = \(x) paste0("+", x, " %")) +
+  scale_colour_manual(values = c("Seuil figé" = "#2c7bb6", "Seuil recalculé" = "#d7191c")) +
+  labs(
+    x = "Hausse du RSA socle et de la PA",
+    y = "Variation du taux de pauvreté à 60 % (points)",
+    colour = NULL,
+    caption = "Source : modèle Ines, variantes CNLE — calculs auteur."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), legend.position = "bottom")
+
+show_girafe(g_diag_seuil, height_svg = 4.2)
+```
+
+Au seuil de 60 %, une hausse de +10 % du RSA socle et de la PA réduit le taux de
+pauvreté de **`r abs(diag_ensemble$delta_fige[diag_ensemble$hausse==10 & diag_ensemble$seuil==60])` pt** (mesure figée) pour un coût net de
+**`r diag_ensemble$cout_net_md[diag_ensemble$hausse==10 & diag_ensemble$seuil==60]` milliards d'euros**. Le rendement décroît
+fortement avec l'ampleur de la réforme : de +10 % à +50 %, le coût est multiplié
+par **`r round(diag_ensemble$cout_net_md[diag_ensemble$hausse==50 & diag_ensemble$seuil==60] / diag_ensemble$cout_net_md[diag_ensemble$hausse==10 & diag_ensemble$seuil==60], 1)`**
+mais le nombre de sorties de pauvreté seulement par
+**`r round(diag_ensemble$sorties_k[diag_ensemble$hausse==50 & diag_ensemble$seuil==60] / diag_ensemble$sorties_k[diag_ensemble$hausse==10 & diag_ensemble$seuil==60], 1)`**.
+
+L'écart entre les deux courbes ci-dessus est le point le plus important pour la
+lecture de ces simulations : relever les minima sociaux déplace mécaniquement la
+médiane du niveau de vie, donc le seuil de pauvreté relatif lui-même. Au seuil
+**figé** (celui de la législation actuelle), l'effet continue de croître avec
+l'ampleur de la réforme ; au seuil **recalculé** — la mesure qui reflète le mieux
+la pauvreté relative réellement observée après la réforme —, le gain marginal
+s'amenuise nettement au-delà de +30 % (**`r diag_ensemble$delta_recalc[diag_ensemble$hausse==30 & diag_ensemble$seuil==60]`** pt,
+contre **`r diag_ensemble$delta_recalc[diag_ensemble$hausse==50 & diag_ensemble$seuil==60]`** pt à +50 %, pour un coût
+`r round(diag_ensemble$cout_net_md[diag_ensemble$hausse==50 & diag_ensemble$seuil==60] / diag_ensemble$cout_net_md[diag_ensemble$hausse==30 & diag_ensemble$seuil==60], 1)`
+fois supérieur). **Au-delà d'un certain point, augmenter encore le RSA et la PA
+ne réduit quasiment plus la pauvreté relative réelle, la réforme finissant par
+« courir après » le seuil qu'elle déplace elle-même.**
+
+## Un levier qui ne touche presque pas les personnes seules {#sec-diag-config}
+
+```{r tbl-diag-config}
+diag_config |>
+  transmute(`Hausse RSA/PA` = paste0("+", hausse, " %"),
+            `Personne seule`, `Famille monoparentale`, `Couple sans enfant`,
+            `Couple avec enfant(s)`, `Autres ménages`, Ensemble) |>
+  gt_cnle(
+    title       = "Variation du taux de pauvreté à 60 % par configuration familiale",
+    subtitle    = "Seuil figé, en points — modèle Ines, législation 2024",
+    source_note = md("**Source :** modèle Ines (Insee-Drees-Cnaf), variantes CNLE — calculs auteur."),
+    spanners    = FALSE
+  ) |>
+  tab_style(
+    # En PDF, gt ne reproduit pas le fond des cellules : du blanc sur blanc
+    # serait illisible, on se contente du gras.
+    style = if (is_html)
+      list(cell_fill(color = "#2c7bb6"), cell_text(color = "white", weight = "bold"))
+    else
+      list(cell_text(weight = "bold")),
+    locations = cells_body(columns = `Famille monoparentale`)
+  ) |>
+  tab_footnote(
+    footnote  = md("Colonne mise en évidence : configuration la plus réactive à la mesure."),
+    locations = cells_column_labels(columns = `Famille monoparentale`)
+  )
+```
+
+Même une hausse de +50 % ne fait reculer le taux de pauvreté des personnes
+seules que de **`r abs(diag_config[["Personne seule"]][diag_config$hausse==50])` pt**, contre
+**`r abs(diag_config[["Famille monoparentale"]][diag_config$hausse==50])` pt** pour les familles
+monoparentales — un rapport de plus de sept. Ce constat rejoint directement la
+mesure d'**intensité** de la @sec-ensemble : les personnes seules pauvres sont
+structurellement très éloignées du seuil (le RSA d'une personne seule reste
+loin en dessous, surtout au seuil de 60 %), si bien qu'une revalorisation
+uniforme du barème ne suffit pas à combler l'écart pour la plupart d'entre
+elles — l'argent réduit leur intensité de pauvreté sans les faire franchir le
+seuil. Les couples sans enfant sont, symétriquement, la configuration la moins
+concernée par construction : ils sont peu nombreux au RSA/PA (cf. @sec-config).
+
+```{r tbl-diag-cout}
+diag_cout50 |>
+  mutate(`Part du coût` = scales::percent(`Part du coût`, accuracy = 0.1, decimal.mark = ",", suffix = " %")) |>
+  gt_cnle(
+    title       = "Répartition du coût d'une hausse de +50 % du RSA socle et de la PA",
+    subtitle    = "Par configuration familiale — coût net redistributif, modèle Ines",
+    source_note = md("**Source :** modèle Ines (Insee-Drees-Cnaf), variantes CNLE — calculs auteur."),
+    spanners    = FALSE
+  )
+```
+
+Les couples avec enfant(s) concentrent **`r scales::percent(diag_cout50[["Part du coût"]][diag_cout50$Configuration=="Couple avec enfant(s)"], accuracy = 1, decimal.mark = ",", suffix = " %")`**
+du coût de la mesure — cohérent avec leur poids dans la population et leur taux
+de pauvreté élevé (@sec-config). Les personnes seules en absorbent
+**`r scales::percent(diag_cout50[["Part du coût"]][diag_cout50$Configuration=="Personne seule"], accuracy = 1, decimal.mark = ",", suffix = " %")`**
+pour une baisse de leur taux de pauvreté quasi nulle (cf. ci-dessus) : une part
+significative de la dépense sert, pour ce sous-groupe, à réduire l'intensité de
+la pauvreté plutôt qu'à en faire sortir des ménages.
+
+## Effet sur les bénéficiaires actuels du RSA et de la prime d'activité {#sec-diag-benef}
+
+On restreint ici la mesure aux **ménages qui perçoivent déjà le RSA ou la prime
+d'activité** dans la législation actuelle — soit **environ 16,0 millions de personnes**.
+Ce sous-ensemble part d'un taux de pauvreté beaucoup plus élevé que l'ensemble de
+la population (**34,7 %** au seuil de 60 %), et concentre l'essentiel de l'effet
+de la réforme.
+
+```{r tbl-diag-benef}
+diag_benef |>
+  transmute(
+    `Hausse RSA/PA`               = paste0("+", hausse, " %"),
+    `Taux de pauvreté avant (%)`  = taux_avant,
+    `Taux de pauvreté après (%)`  = taux_apres_fige,
+    `Δ 60 % — figé (pt)`          = delta_fige,
+    `Δ 60 % — recalculé (pt)`     = delta_recalc,
+    `Intensité avant (%)`         = int_avant,
+    `Δ intensité 60 % (pt)`       = delta_int,
+    `Coût sur ce champ (Mds €)`   = cout_benef_md
+  ) |>
+  gt_cnle(
+    title       = "Effet de la hausse du RSA/PA sur les bénéficiaires actuels",
+    subtitle    = "Champ : ménages percevant le RSA ou la prime d'activité — seuil de 60 %, modèle Ines",
+    source_note = md("**Source :** modèle Ines (Insee-Drees-Cnaf), variantes CNLE — calculs auteur."),
+    spanners    = FALSE
+  ) |>
+  tab_footnote(
+    footnote  = md("Taux mesuré au seuil figé de la législation actuelle : part des bénéficiaires qui **restent** sous le seuil de pauvreté après la réforme."),
+    locations = cells_column_labels(columns = `Taux de pauvreté après (%)`)
+  )
+```
+
+Même une hausse de **+50 %**, qui coûte 36,2 milliards d'euros, laisse
+**`r benef_reste_50` %** des bénéficiaires actuels sous le seuil de pauvreté à
+60 % (contre 34,7 % avant réforme) : environ **un bénéficiaire sur cinq** reste
+pauvre. L'effet mesuré au seuil recalculé est plus faible que le figé, mais
+l'écart se creuse moins que pour l'ensemble de la population — le seuil relatif
+est tiré par la médiane nationale, peu sensible à ce seul sous-groupe.
+
+Sur les **`r cout_total_50` milliards d'euros** de coût total d'une hausse de
++50 %, **`r cout_benef_50` milliards** (soit
+`r scales::percent(part_benef_50, accuracy = 1, decimal.mark = ",", suffix = " %")`) bénéficient
+aux ménages déjà au RSA ou à la PA ; le reste — environ
+`r round(cout_total_50 - cout_benef_50, 1)` milliards — va à des ménages qui
+n'en percevaient pas, entrant dans le champ de la prime d'activité du fait de la
+hausse du forfait. Le nombre de gagnants (**`r gagnants_50` millions** de
+personnes à +50 %) dépasse d'ailleurs nettement les 16,0 millions de
+bénéficiaires actuels.
+
+```{r tbl-diag-benef-config}
+diag_benef_config |>
+  transmute(`Hausse RSA/PA` = paste0("+", hausse, " %"),
+            `Personne seule`, `Famille monoparentale`, `Couple sans enfant`,
+            `Couple avec enfant(s)`, `Autres ménages`) |>
+  gt_cnle(
+    title       = "Variation du taux de pauvreté des bénéficiaires, par configuration familiale",
+    subtitle    = "Seuil de 60 %, en points — champ des bénéficiaires du RSA/PA, modèle Ines",
+    source_note = md("**Source :** modèle Ines (Insee-Drees-Cnaf), variantes CNLE — calculs auteur."),
+    spanners    = FALSE
+  ) |>
+  tab_footnote(
+    footnote  = md(paste0(
+      "Effectifs de bénéficiaires par configuration (millions de personnes) : ",
+      "personne seule 2,1 ; famille monoparentale 3,7 ; couple sans enfant 1,0 ; ",
+      "couple avec enfant(s) 7,7 ; autres ménages 1,4.")),
+    locations = cells_column_labels(columns = `Personne seule`)
+  )
+```
+
+Le contraste par configuration se retrouve **à l'intérieur même du champ des
+bénéficiaires** : à +50 %, le taux de pauvreté recule de
+**`r abs(diag_benef_config[["Couple avec enfant(s)"]][diag_benef_config$hausse == 50])` pt**
+pour les couples avec enfant(s) bénéficiaires, mais seulement de
+**`r abs(diag_benef_config[["Personne seule"]][diag_benef_config$hausse == 50])` pt**
+pour les personnes seules bénéficiaires. Autrement dit, ce n'est pas seulement
+que les personnes seules pauvres sont peu nombreuses au RSA/PA : même quand elles
+le perçoivent, la revalorisation ne suffit pas à les faire franchir le seuil,
+faute de combler un écart initial trop important.
+

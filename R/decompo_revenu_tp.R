@@ -80,13 +80,13 @@ g_D <- ggplot(D, aes(x = annee, y = taux, colour = couche, group = couche)) +
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.2) +
   scale_colour_manual(values = pal_D) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
+  scale_x_continuous(breaks = seq(2005, 2024, 2)) +
   scale_y_continuous(labels = label_number(suffix = " %")) +
   expand_limits(y = 0) +
   guides(colour = guide_legend(nrow = 3)) +
   labs(x = NULL, y = "Taux de pauvreté laborieuse ancré (%)",
        caption = paste0(
-         "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
          "Seuil ancré (pouvoir d'achat 2005). L'écart entre deux courbes mesure la contribution ",
          "du bloc de revenu intercalé. Champ : PR en emploi, 18-64 ans.")) +
   theme_erfs()
@@ -126,12 +126,12 @@ g_E <- ggplot(E, aes(x = annee, y = indice, colour = source, group = source)) +
   geom_hline(yintercept = 100, linewidth = 0.3, colour = "grey70") +
   geom_line_interactive(linewidth = 1.1) +
   geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 2.2) +
-  scale_colour_manual(values = c("Salaires" = "#1f78b4",
-                                 "Autres revenus primaires" = "#33a02c")) +
-  scale_x_continuous(breaks = seq(2005, 2023, 2)) +
-  labs(x = NULL, y = "Revenu réel du ménage médian (indice base 100 = 2005)",
+  scale_colour_manual(values = c("Salaires" = "#2674DD",
+                                 "Autres revenus primaires" = "#D79700")) +
+  scale_x_continuous(breaks = seq(2005, 2024, 2)) +
+  labs(x = NULL, y = "Revenu réel du ménage médian (base 100 = 2005)",
        caption = paste0(
-         "Source : INSEE, ERFS 2005-2023, calculs de l'auteur.\n",
+         "Source : INSEE, ERFS 2005-2024, calculs de l'auteur.\n",
          "Ménage médian = tranche D45-D55 du niveau de vie. Autres revenus primaires : ",
          "pensions de retraite, revenus du capital et des indépendants. Déflaté par l'IPC.")) +
   theme_erfs()
@@ -140,9 +140,9 @@ cat("decrochage_sources : ok\n")
 
 # Contrôles
 cat("\n--- D : pauvreté ancrée par couche ---\n")
-print(as.data.frame(D |> filter(annee %in% c(2005, 2023)) |>
+print(as.data.frame(D |> filter(annee %in% c(2005, max(annee))) |>
         select(annee, couche, taux) |> mutate(taux = round(taux, 1))), row.names = FALSE)
 cat("\n--- E : croissance réelle 2005->2023 du revenu médian par source ---\n")
-print(as.data.frame(E |> filter(annee == 2023) |> select(source, indice) |>
+print(as.data.frame(E |> filter(annee == max(annee)) |> select(source, indice) |>
         mutate(croissance_pct = round(indice - 100))), row.names = FALSE)
 cat("\n=== decompo_revenu_tp.R terminé ===\n")

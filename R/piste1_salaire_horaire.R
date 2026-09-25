@@ -1,7 +1,7 @@
 # ==============================================================================
 # piste1_salaire_horaire.R
 #
-# Distribution du salaire horaire des travailleurs pauvres (2013-2023)
+# Distribution du salaire horaire des travailleurs pauvres (2013-2024)
 # Figures produites :
 #   tp_salaire_horaire_distrib.rds  — densités ratio horaire/SMIC (pauvres vs non-pauvres)
 #   tp_salaire_horaire_evol.rds     — évolution % au-dessus du SMIC horaire
@@ -20,9 +20,9 @@ path_fig <- "figure"
 
 # SMIC net annuel et horaire (net de cotisations salariales, 1820 h/an)
 smic_net <- tibble(
-  annee = 2013:2023,
+  annee = 2013:2024,
   smic_net_annuel = c(13191, 13320, 13464, 13596, 13884, 14424,
-                      14976, 15288, 15876, 17472, 18534)
+                      14976, 15288, 15876, 17472, 18534, 18744)
 ) |> mutate(smic_net_horaire = smic_net_annuel / 1820)
 
 # Conversion code txtppred → fraction de temps de travail
@@ -61,7 +61,7 @@ tp_indiv <- base |>
 
 # ── Figure 1 : densités du ratio salaire horaire / SMIC ──────────────────────
 
-pal2 <- c("Travailleur pauvre" = "#e31a1c", "Travailleur non pauvre" = "#1f78b4")
+pal2 <- c("Travailleur pauvre" = "#E91422", "Travailleur non pauvre" = "#2674DD")
 
 plot_data <- tp_indiv |>
   filter(ratio_smic <= 3) |>
@@ -71,17 +71,17 @@ g_distrib <- ggplot(plot_data,
   aes(x = ratio_smic, weight = wprm, fill = pauvre_lab, colour = pauvre_lab)) +
   geom_density(alpha = 0.30, linewidth = 0.8, adjust = 1.2) +
   geom_vline(xintercept = 1, linetype = "dashed", colour = "grey40", linewidth = 0.7) +
-  annotate("text", x = 1.04, y = Inf, label = "SMIC net horaire",
+  annotate("text", x = 1.04, y = Inf, label = "Smic net horaire",
            hjust = 0, vjust = 1.5, size = 3.2, colour = "grey30") +
   scale_fill_manual(values = pal2) +
   scale_colour_manual(values = pal2) +
-  scale_x_continuous(labels = scales::label_number(suffix = "× SMIC"),
+  scale_x_continuous(labels = scales::label_number(suffix = "× Smic"),
                      breaks = seq(0, 3, 0.5)) +
   labs(
-    x = "Salaire horaire / SMIC net horaire",
-    y = "Densité (pondérée)",
+    x = "salaire horaire / Smic net horaire",
+    y = "densité (pondérée)",
     fill = NULL, colour = NULL,
-    caption = "Source : INSEE, ERFS 2013-2023, calculs de l'auteur.\nChamp : PR en emploi 18-64 ans avec quotité connue."
+    caption = "Source : INSEE, ERFS 2013-2024, calculs de l'auteur.\nChamp : PR en emploi 18-64 ans avec quotité connue."
   ) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "top", panel.grid.minor = element_blank())
@@ -106,10 +106,10 @@ g_evol <- ggplot(evol_smic,
   geom_point_interactive(colour = "#e31a1c", size = 2.5) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                      limits = c(0, 0.6)) +
-  scale_x_continuous(breaks = 2013:2023) +
+  scale_x_continuous(breaks = seq(2013, 2024, 2)) +
   labs(
     x = NULL, y = "Part des travailleurs pauvres\nau-dessus du SMIC horaire",
-    caption = "Source : INSEE, ERFS 2013-2023, calculs de l'auteur.\nChamp : PR en emploi pauvres 18-64 ans avec quotité connue."
+    caption = "Source : INSEE, ERFS 2013-2024, calculs de l'auteur.\nChamp : PR en emploi pauvres 18-64 ans avec quotité connue."
   ) +
   theme_minimal(base_size = 12) +
   theme(panel.grid.minor = element_blank(),
