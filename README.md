@@ -99,19 +99,14 @@ Fichier CSV éditable pour la mise à jour annuelle. Colonnes :
 
 ## Pouvoir d'achat des ménages (`R/pouvoir_achat_menages.R`, `pouvoir_achat.qmd`)
 
-Reconstruction, à partir des comptes nationaux trimestriels de l'INSEE (compte
-de revenu des ménages, base 2020), d'une série annuelle (1960-2025) et
-trimestrielle (1949T1-2025T3) de l'évolution du pouvoir d'achat des ménages :
-
-- niveau (Mds €) et contribution de chaque composante du revenu disponible
-  brut (salaires bruts, EBE/revenu mixte, revenus de la propriété,
-  prestations sociales, cotisations sociales, impôts) à la croissance du
-  pouvoir d'achat ;
-- pouvoir d'achat total, par personne, par ménage et par unité de
-  consommation (UC), en taux de croissance (séries officielles INSEE) ;
-- estimation du niveau en euros courants et constants du RDB par ménage et
-  par UC (le "euros par UC" est une estimation, le nombre d'UC en niveau
-  n'étant pas publié par l'INSEE — cf. méthodologie dans `pouvoir_achat.qmd`).
+Reconstruction, à partir des comptes nationaux de l'INSEE (compte de revenu
+des ménages, base 2020), de l'évolution du revenu disponible brut (RDB) par
+unité de consommation (UC), depuis 2017 : un graphique annuel montrant, pour
+chaque année, comment le RDB par UC se forme (ressources : salaires bruts,
+EBE/revenu mixte des indépendants, revenus de la propriété, prestations
+sociales, nets des cotisations sociales et des impôts) et à quoi il sert
+(emplois : consommation par grande fonction — alimentation, tabac, produits
+manufacturés, énergie, services — et épargne, le résidu).
 
 ```r
 source("R/pouvoir_achat_menages.R")
@@ -119,5 +114,7 @@ quarto::quarto_render("pouvoir_achat.qmd")
 ```
 
 Sources brutes dans `data/insee_pouvoir_achat/` (fichiers INSEE téléchargés
-le 2026-09-25, base 2020) ; tables produites : `pouvoir_achat_annuel.csv` et
-`pouvoir_achat_trimestriel.csv` dans le même dossier.
+le 2026-09-25, base 2020) ; table produite :
+`ressources_emplois_annuel_par_uc.csv` dans le même dossier. Le nombre d'UC
+en niveau et la répartition de la consommation par fonction sont des
+estimations documentées dans `pouvoir_achat.qmd`.

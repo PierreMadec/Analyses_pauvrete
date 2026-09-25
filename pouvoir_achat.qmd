@@ -1,5 +1,5 @@
 ---
-title: "Le pouvoir d'achat des ménages : reconstruction et décomposition"
+title: "Le pouvoir d'achat des ménages : ressources et emplois du RDB par UC"
 author:
   - name: "Pierre Madec"
     email: "pierre.madec@ofce.sciences-po.fr"
@@ -9,8 +9,8 @@ format:
     toc: true
     toc-depth: 3
     number-sections: true
-    fig-width: 10
-    fig-height: 6
+    fig-width: 12
+    fig-height: 8.5
     embed-resources: true
 execute:
   error: true
@@ -25,15 +25,10 @@ library(ggplot2)
 library(tidyverse)
 
 path_g <- "figure"
-
-# Toujours relancer le script (pas de cache conditionnel sur la présence des
-# .rds) : le pipeline est rapide et un cache basé sur l'existence des
-# fichiers de sortie masque silencieusement toute mise à jour du script tant
-# que d'anciennes sorties traînent dans figure/.
 source("R/pouvoir_achat_menages.R", local = FALSE)
 
 is_html <- knitr::is_html_output()
-show_girafe <- function(rds_path, width_svg = 10, height_svg = 6) {
+show_girafe <- function(rds_path, width_svg = 12, height_svg = 8.5) {
   if (!file.exists(rds_path)) {
     message("Fichier non trouvé : ", rds_path); return(invisible(NULL))
   }
@@ -52,96 +47,24 @@ show_girafe <- function(rds_path, width_svg = 10, height_svg = 6) {
 
 # Objet
 
-Ce document reconstitue, à partir des comptes nationaux trimestriels de l'INSEE (compte de revenu des ménages, base 2020), une série annuelle et trimestrielle de l'évolution du pouvoir d'achat des ménages : le niveau et la contribution de chaque composante du revenu disponible brut (RDB), le pouvoir d'achat total et par unité de consommation (UC), et une estimation du niveau en euros par ménage et par UC. Le code source est dans `R/pouvoir_achat_menages.R` ; les tables produites sont dans `data/insee_pouvoir_achat/pouvoir_achat_annuel.csv` et `..._trimestriel.csv`.
+Ce document reconstitue, à partir des comptes nationaux de l'INSEE (compte de revenu des ménages, base 2020), l'évolution du revenu disponible brut (RDB) par unité de consommation (UC) depuis 2017 : comment il se forme (les ressources — salaires, revenu des indépendants, revenus de la propriété, prestations sociales, nets des cotisations et impôts) et à quoi il sert (les emplois — consommation par grande fonction, et épargne). Le code source est dans `R/pouvoir_achat_menages.R` ; la table produite est dans `data/insee_pouvoir_achat/ressources_emplois_annuel_par_uc.csv`.
 
-# Décomposition de l'évolution du pouvoir d'achat
+# Ressources et emplois du RDB par UC, depuis 2017
 
-Le @fig-decompo-annuelle décompose la croissance annuelle du pouvoir d'achat du RDB des ménages en contributions des grandes masses du compte des ménages — salaires bruts, excédent brut d'exploitation et revenu mixte des entrepreneurs individuels, revenus de la propriété (intérêts et dividendes nets), prestations sociales, cotisations sociales, impôts sur le revenu et le patrimoine — et d'un effet prix (déflateur de la consommation). La ligne noire est le taux de croissance officiel publié par l'INSEE ; l'écart avec la somme des contributions est le résidu de linéarisation usuel de ce type de décomposition (inférieur à 0,1 point).
-
-```{r}
-#| label: fig-decompo-annuelle
-#| fig-cap: "Contribution des composantes du RDB à l'évolution du pouvoir d'achat des ménages. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa1_decomposition_annuelle.rds"))
-```
-
-Le @fig-decompo-trim reprend le même exercice au niveau trimestriel, sur les deux dernières années, pour un suivi conjoncturel.
+Le @fig-ressources-emplois présente, pour chaque année depuis 2017, deux colonnes qui totalisent le même montant : à gauche, comment le RDB par UC se forme (ressources, empilées jusqu'à leur total *brut*, avant charges — la ligne pointillée marque le RDB *net*, une fois retirés impôts et cotisations) ; à droite, à quoi il sert (consommation par grande fonction, puis épargne, le résidu). En suivant l'évolution de ces deux colonnes d'année en année, on peut lire à la fois la recomposition des sources de revenu et celle de la marge de manœuvre (épargne) des ménages.
 
 ```{r}
-#| label: fig-decompo-trim
-#| fig-cap: "Contribution des composantes du RDB à l'évolution trimestrielle du pouvoir d'achat, huit derniers trimestres. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
+#| label: fig-ressources-emplois
+#| fig-cap: "Revenu disponible brut par unité de consommation : ressources et emplois, depuis 2017. Source : Insee, comptes nationaux, base 2020, calculs OFCE."
 #| echo: false
-show_girafe(file.path(path_g, "pa3_decomposition_trim.rds"))
-```
-
-Le @fig-decompo-euros-uc reprend la même décomposition annuelle, mais exprimée en euros par unité de consommation plutôt qu'en points de croissance : chaque contribution est convertie en appliquant le taux de contribution au RDB par UC de l'année précédente, effet prix inclus, de sorte que la somme des postes approxime la variation réelle (en euros) du RDB par UC.
-
-```{r}
-#| label: fig-decompo-euros-uc
-#| fig-cap: "Contribution des composantes du RDB à la variation du RDB par unité de consommation, en euros. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE ; nombre d'UC estimé (cf. méthodologie)."
-#| echo: false
-show_girafe(file.path(path_g, "pa4_decomposition_annuelle_euros.rds"))
-```
-
-Le @fig-decompo-trim-euros-uc reprend cette même décomposition en euros par UC au niveau **trimestriel**, depuis 2017, avec un pas supplémentaire : l'effet prix (une seule barre dans les graphiques précédents) y est détaillé par grande fonction de consommation (alimentation, tabac, produits manufacturés, énergie, services), à partir de l'indice des prix à la consommation (IPC). Ce détail est une estimation : les pondérations utilisées sont celles de 2026 (fixes sur toute la période, alors qu'elles évoluent en réalité chaque année). L'IPC n'est pas exactement le déflateur de la consommation des comptes nationaux utilisé par ailleurs dans ce document (mesures de prix proches mais pas identiques) ; plutôt que de forcer les 5 postes IPC à sommer exactement à l'effet prix du déflateur — ce qui les amplifiait de façon disproportionnée certains trimestres où les deux mesures divergent fortement (ex. 2019T4, 2023T4) —, l'écart entre les deux est isolé dans un poste dédié "Écart IPC / déflateur".
-
-```{r}
-#| label: fig-decompo-trim-euros-uc
-#| fig-cap: "Contribution des composantes du RDB, effet prix détaillé par fonction de consommation, à la variation trimestrielle du RDB par UC, en euros, depuis 2017. Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE."
-#| fig-height: 7
-#| echo: false
-show_girafe(file.path(path_g, "pa5_decomposition_trim_euros_uc.rds"), height_svg = 7)
-```
-
-# Le RDB en euros, par ménage et par unité de consommation
-
-Le @fig-euros-menage-uc rapporte le RDB nominal (en euros courants et en euros constants de l'année la plus récente disponible) au nombre de ménages, d'une part, et au nombre d'unités de consommation, d'autre part.
-
-```{r}
-#| label: fig-euros-menage-uc
-#| fig-cap: "Revenu disponible brut par ménage et par unité de consommation, euros courants et euros constants. Source : Insee, comptes nationaux, base 2020, calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa2_euros_menage_uc.rds"))
-```
-
-Le @fig-niveau-trim-menage-uc reprend ce même niveau en euros par ménage et par UC, mais au **trimestre**, depuis 2017 : où en est-on aujourd'hui par rapport à 2017, en euros courants comme en euros constants.
-
-```{r}
-#| label: fig-niveau-trim-menage-uc
-#| fig-cap: "Revenu disponible brut par ménage et par unité de consommation, niveau trimestriel depuis 2017, euros courants et euros constants. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa6_niveau_trim_menage_uc.rds"))
-```
-
-Le @fig-niveau-trim-prix compare, sur la même période, le niveau du déflateur de la consommation (utilisé pour l'ensemble de ce document) et celui de l'indice des prix à la consommation (IPC) — les deux indices étant rebasés à 100 au premier trimestre affiché pour rendre leurs évolutions cumulées comparables. C'est ce même écart, trimestre par trimestre, qui apparaît comme poste "Écart IPC / déflateur" dans le @fig-decompo-trim-euros-uc.
-
-```{r}
-#| label: fig-niveau-trim-prix
-#| fig-cap: "Déflateur de la consommation et IPC, niveau trimestriel depuis 2017, indice base 100. Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa7_niveau_trim_prix.rds"))
-```
-
-Enfin, le @fig-niveau-composantes-rdb détaille le niveau du RDB par UC par composante (et non plus seulement sa variation, cf. @fig-decompo-trim-euros-uc), et le @fig-niveau-composantes-prix fait de même pour les prix : le niveau de chacune des 5 grandes fonctions de consommation, plutôt que leur seule contribution à la variation.
-
-```{r}
-#| label: fig-niveau-composantes-rdb
-#| fig-cap: "RDB par UC : niveau trimestriel et décomposition par composante, depuis 2017. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa8_niveau_trim_composantes_rdb.rds"))
-```
-
-```{r}
-#| label: fig-niveau-composantes-prix
-#| fig-cap: "Prix à la consommation par grande fonction, niveau trimestriel depuis 2017 (indice base 100). Source : Insee, IPC (base 2015), calculs OFCE."
-#| echo: false
-show_girafe(file.path(path_g, "pa9_niveau_trim_composantes_prix.rds"))
+show_girafe(file.path(path_g, "pa_ressources_emplois_annuel.rds"))
 ```
 
 ## Méthodologie et limites
 
-- Le RDB, sa décomposition en composantes et les taux de croissance officiels du pouvoir d'achat (total, par personne, par ménage, par UC) sont des séries INSEE exactes, sans retraitement.
-- Le **nombre de ménages** en niveau est ancré sur les recensements de la population (1999, 2006, 2011, 2016) puis chaîné à l'aide du taux de croissance officiel INSEE de la série "Nombre de ménages" des comptes nationaux. Le contrôle de cohérence (affiché en sortie du script R) montre un écart inférieur à 0,05 % entre le chaînage et les benchmarks de recensement sur 1999-2016 : le "euros par ménage" qui en résulte est donc fiable.
-- Le **nombre d'unités de consommation** en niveau n'est pas publié par l'INSEE (seul son taux de croissance annuel l'est). Il est ici *estimé* à partir de la structure des ménages par type au recensement 2016 (personnes seules, couples, familles monoparentales, ménages complexes) et de l'échelle d'équivalence OCDE modifiée (1 UC pour le premier adulte, 0,5 pour les autres personnes de 14 ans ou plus, 0,3 pour les enfants de moins de 14 ans) — cf. `data/insee_pouvoir_achat/uc_par_type_menage_2016.csv` pour le détail du calcul —, puis chaîné avec le taux de croissance officiel INSEE. Le **"euros par UC" est donc une estimation** (ordre de grandeur, incertitude de l'ordre de ± 5 à 10 %), à la différence du "euros par ménage". Le taux de croissance du pouvoir d'achat par UC, lui, reste la série officielle exacte et n'est pas affecté par cette approximation.
+- Le RDB et sa décomposition en composantes de ressources (salaires bruts, EBE et revenu mixte des indépendants, revenus de la propriété, prestations sociales, cotisations sociales, impôts sur le revenu et le patrimoine) sont des séries INSEE exactes, sans retraitement — de même que le taux d'épargne officiel, qui fixe exactement le partage consommation totale / épargne.
+- Le **nombre d'unités de consommation** en niveau n'est pas publié par l'INSEE (seul son taux de croissance annuel l'est). Il est ici *estimé* à partir de la structure des ménages par type au recensement 2016 (personnes seules, couples, familles monoparentales, ménages complexes) et de l'échelle d'équivalence OCDE modifiée (1 UC pour le premier adulte, 0,5 pour les autres personnes de 14 ans ou plus, 0,3 pour les enfants de moins de 14 ans) — cf. `data/insee_pouvoir_achat/uc_par_type_menage_2016.csv` pour le détail du calcul —, puis chaîné avec le taux de croissance officiel INSEE. Tous les montants "par UC" sont donc des **estimations** (ordre de grandeur, incertitude de l'ordre de ± 5 à 10 %), pas des niveaux officiels.
+- La **répartition de la consommation** entre les 5 grandes fonctions (alimentation, tabac, produits manufacturés, énergie, services) utilise les pondérations de l'IPC 2026 (Insee, Informations rapides IPC août 2026, n° 218) comme proxy de la structure de consommation des ménages, appliquées de façon fixe sur toute la période 2017-2024 alors qu'elles évoluent en réalité chaque année. Le total consommation + épargne = RDB net reste en revanche exact ; seule la répartition de la consommation entre les 5 fonctions est approchée.
+- Seules les **années complètes** (4 trimestres publiés) sont retenues : l'année en cours, tant qu'elle n'est pas complète, est exclue plutôt que sous-estimée.
 
-Champ : France, ménages y compris entrepreneurs individuels. Sources : Insee, comptes nationaux trimestriels et annuels (base 2020) ; recensements de la population 1999-2016.
+Champ : France, ménages y compris entrepreneurs individuels. Sources : Insee, comptes nationaux trimestriels et annuels (base 2020) ; recensement de la population 2016 ; indice des prix à la consommation (base 2015).
