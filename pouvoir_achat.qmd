@@ -47,11 +47,11 @@ show_girafe <- function(rds_path, width_svg = 12, height_svg = 8.5) {
 
 # Objet
 
-Ce document reconstitue, à partir des comptes nationaux de l'INSEE (compte de revenu des ménages, base 2020), l'évolution du revenu disponible brut (RDB) par unité de consommation (UC) depuis 2017 : comment il se forme (les ressources — salaires, revenu des indépendants, revenus de la propriété, prestations sociales, nets des cotisations et impôts) et à quoi il sert (les emplois — consommation par grande fonction, et épargne). Le code source est dans `R/pouvoir_achat_menages.R` ; la table produite est dans `data/insee_pouvoir_achat/ressources_emplois_annuel_par_uc.csv`.
+Ce document reconstitue, à partir des comptes nationaux de l'INSEE (compte de revenu des ménages, base 2020), l'évolution du revenu disponible brut (RDB) par unité de consommation (UC) depuis 2017, **en euros constants** (déflatés, donc en pouvoir d'achat réel et non en simple progression nominale) : comment il se forme (les ressources — salaires, revenu des indépendants, revenus de la propriété, prestations sociales, nets des cotisations et impôts) et à quoi il sert (les emplois — consommation par grande fonction, et épargne). Le code source est dans `R/pouvoir_achat_menages.R` ; la table produite est dans `data/insee_pouvoir_achat/ressources_emplois_annuel_par_uc.csv`.
 
 # Ressources et emplois du RDB par UC, depuis 2017
 
-Le @fig-ressources-emplois présente, pour chaque année depuis 2017, deux colonnes qui totalisent le même montant : à gauche, comment le RDB par UC se forme (ressources, empilées jusqu'à leur total *brut*, avant charges — la ligne pointillée marque le RDB *net*, une fois retirés impôts et cotisations) ; à droite, à quoi il sert (consommation par grande fonction, puis épargne, le résidu). En suivant l'évolution de ces deux colonnes d'année en année, on peut lire à la fois la recomposition des sources de revenu et celle de la marge de manœuvre (épargne) des ménages.
+Le @fig-ressources-emplois présente, pour chaque année depuis 2017 et en euros constants, deux colonnes qui totalisent le même montant : à gauche, comment le RDB par UC se forme (ressources, empilées jusqu'à leur total *brut*, avant charges — la ligne pointillée marque le RDB *net*, une fois retirés impôts et cotisations) ; à droite, à quoi il sert (consommation par grande fonction, puis épargne, le résidu). Étant en euros constants, le graphique fait apparaître les années où le pouvoir d'achat réel recule (2020, 2022) et pas seulement sa progression nominale, qui masquerait ces reculs.
 
 ```{r}
 #| label: fig-ressources-emplois

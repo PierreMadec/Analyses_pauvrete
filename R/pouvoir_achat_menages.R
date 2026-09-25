@@ -104,6 +104,7 @@ pa_annuel_officiel <- raw_annuel |>
   mutate(cle = case_when(
     str_detect(indicateur, "^Taux d.épargne")    ~ "taux_epargne",
     str_detect(indicateur, "^Nombre d.unit")           ~ "g_nb_uc",
+    str_starts(indicateur, "Indice du prix")            ~ "g_deflateur",
     TRUE ~ NA_character_
   )) |>
   filter(!is.na(cle)) |>
@@ -144,24 +145,31 @@ uc_par_type <- read_csv(file.path(dir_data, "uc_par_type_menage_2016.csv"), show
   )
 nb_uc_2016_milliers <- sum(uc_par_type$uc_total_milliers)
 
+annee_debut <- 2017
+annee_fin   <- max(niveaux_annuel$annee, na.rm = TRUE)  # dernière année complète (4 trimestres)
+
+# Déflateur annuel chaîné, ancré à 100 sur la dernière année du graphique :
+# tout le graphique est exprimé en euros constants de annee_fin, pour que
+# l'évolution du RDB net reflète le pouvoir d'achat réel (et non la seule
+# hausse nominale, qui masquerait par exemple le recul de 2022).
 pa_annuel <- pa_annuel_officiel |>
-  mutate(nb_uc_milliers = chainer_niveau(annee, g_nb_uc, 2016, nb_uc_2016_milliers))
+  mutate(
+    nb_uc_milliers   = chainer_niveau(annee, g_nb_uc, 2016, nb_uc_2016_milliers),
+    deflateur_indice = chainer_niveau(annee, g_deflateur, annee_fin, 100)
+  )
 
 # ==============================================================================
-# 4. Ressources et emplois du RDB par UC, depuis 2017
+# 4. Ressources et emplois du RDB par UC, depuis 2017, en euros constants
 # ==============================================================================
 
 ipc_ponderations <- read_csv(file.path(dir_data, "ipc_ponderations_2026.csv"), show_col_types = FALSE)
 
-annee_debut <- 2017
-annee_fin   <- max(niveaux_annuel$annee, na.rm = TRUE)
-
 ressources_emplois <- niveaux_annuel |>
-  left_join(pa_annuel |> select(annee, taux_epargne, nb_uc_milliers), by = "annee") |>
+  left_join(pa_annuel |> select(annee, taux_epargne, nb_uc_milliers, deflateur_indice), by = "annee") |>
   filter(annee >= annee_debut, annee <= annee_fin) |>
   mutate(
     across(all_of(c(postes_ressources, postes_charges, "rdb")),
-           ~ .x * 1e9 / (nb_uc_milliers * 1e3), .names = "euc_{.col}"),
+           ~ (.x * 1e9 / (nb_uc_milliers * 1e3)) * 100 / deflateur_indice, .names = "euc_{.col}"),
     conso_totale_euc = euc_rdb * (1 - taux_epargne / 100),
     epargne_euc      = euc_rdb * taux_epargne / 100
   )
@@ -270,14 +278,15 @@ g1 <- ggplot() +
                       expand = expansion(mult = c(0.02, 0.12))) +
   scale_fill_manual(values = couleurs) +
   labs(
-    x = NULL, y = "€ par UC (niveau annuel)", fill = NULL,
-    title = "Revenu disponible brut par UC : ressources et emplois, depuis 2017",
+    x = NULL, y = paste0("€ par UC, en euros constants ", annee_fin), fill = NULL,
+    title = paste0("Revenu disponible brut par UC : ressources et emplois, depuis 2017 (euros constants ", annee_fin, ")"),
     caption = paste0(
-      "Source : Insee, comptes nationaux, base 2020, calculs OFCE — euros courants. ",
-      "Ressources : 7 postes empilés jusqu'au total brut (avant charges) ; la ligne pointillée marque le RDB net ",
-      "(brut moins impôts et cotisations), identique au sommet de la colonne Emplois. Emplois = consommation ",
-      "(répartie selon les pondérations IPC 2026, proxy de la structure de consommation) + épargne (résidu, taux ",
-      "d'épargne officiel Insee). Nombre d'UC ESTIMé (cf. méthodologie en tête de script)."
+      "Source : Insee, comptes nationaux, base 2020, calculs OFCE — euros constants ", annee_fin,
+      " (déflatés par l'indice des prix de la consommation des ménages) : l'évolution reflète le pouvoir d'achat réel, ",
+      "pas la seule hausse nominale. Ressources : 7 postes empilés jusqu'au total brut (avant charges) ; la ligne ",
+      "pointillée marque le RDB net (brut moins impôts et cotisations), identique au sommet de la colonne Emplois. ",
+      "Emplois = consommation (répartie selon les pondérations IPC 2026, proxy de la structure de consommation) + ",
+      "épargne (résidu, taux d'épargne officiel Insee). Nombre d'UC ESTIMÉ (cf. méthodologie en tête de script)."
     )
   ) +
   theme_minimal(base_size = 13) +
