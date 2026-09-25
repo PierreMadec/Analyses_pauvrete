@@ -239,9 +239,15 @@ print(controle_chainage)
 # 4. Décomposition annuelle du RDB par composante (niveaux et contributions)
 # ==============================================================================
 
+# NB : on ne garde que les années complètes (4 trimestres). L'année en cours
+# (ex. 2025 avec seulement T1-T3 publiés) serait sinon sommée sur 3 trimestres
+# et comparée à une année pleine précédente, ce qui produit des contributions
+# et des euros/ménage-UC artificiellement énormes pour ce dernier point.
 niveaux_annuel <- niveaux_trim |>
   group_by(annee) |>
-  summarise(across(ebe_ei:rdb_ajuste, sum), .groups = "drop") |>
+  summarise(across(ebe_ei:rdb_ajuste, sum), n_trimestres = n(), .groups = "drop") |>
+  filter(n_trimestres == 4) |>
+  select(-n_trimestres) |>
   arrange(annee)
 
 compo_annuel <- niveaux_annuel |>
@@ -267,7 +273,8 @@ compo_annuel <- niveaux_annuel |>
     euros_par_uc_reel      = euros_par_uc * 100 / deflateur_indice
   )
 
-annee_reference <- max(compo_annuel$annee, na.rm = TRUE)
+annee_reference  <- max(compo_annuel$annee, na.rm = TRUE)   # dernière année complète (4 trimestres)
+annee_base_prix  <- max(pa_annuel$annee, na.rm = TRUE)       # année de base du déflateur (indice = 100), peut être postérieure
 
 # ==============================================================================
 # 5. Exports (CSV + RDS)
@@ -341,7 +348,7 @@ g2_data <- compo_annuel |>
   pivot_longer(-annee, names_to = "serie", values_to = "euros") |>
   mutate(
     unite = if_else(str_detect(serie, "menage"), "Par ménage", "Par unité de consommation"),
-    prix  = if_else(str_detect(serie, "_reel"), paste0("Euros constants ", annee_reference), "Euros courants"),
+    prix  = if_else(str_detect(serie, "_reel"), paste0("Euros constants ", annee_base_prix), "Euros courants"),
     tooltip = paste0(unite, " — ", prix, "\n", annee, " : ", scales::comma(round(euros), big.mark = " "), " €"),
     data_id = paste0(serie, "_", annee)
   )
