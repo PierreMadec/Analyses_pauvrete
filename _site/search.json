@@ -719,5 +719,19 @@
     "title": "Travailler sans échapper à la pauvreté : pourquoi le travail protège-t-il de moins en moins ?",
     "section": "7.11 Robustesse : seuils alternatifs et quasi-pauvres",
     "text": "7.11 Robustesse : seuils alternatifs et quasi-pauvres\nLe choix du seuil à 60 % de la médiane est la convention européenne, mais les résultats sont-ils sensibles à ce choix ? Le Graphique 30 présente le taux de pauvreté laborieuse aux seuils à 50 %, 60 % et 70 % de la médiane, ainsi que le taux de quasi-pauvreté (zone 100-120 % du seuil). Les tendances sont convergentes aux trois seuils : hausse sur la période et recul partiel après 2021. Le seuil à 70 % produit un niveau naturellement plus élevé, mais la dynamique reste identique. Le taux de quasi-pauvres (7-8 %) est stable sur toute la période, sans signal d’aggravation particulière à court terme : les travailleurs situés juste au-dessus du seuil ne se sont pas rapprochés de celui-ci au fil du temps (distance médiane stable à ≈ 10 % du seuil).\n\n\n\n\n\n\n\n\nGraphique 30: Taux de pauvreté laborieuse aux seuils à 50 %, 60 % et 70 % de la médiane, et taux de quasi-pauvres (100-120 % du seuil), 2005-2023. Source : INSEE, ERFS, calculs de l’auteur."
+  },
+  {
+    "objectID": "pouvoir_achat.html",
+    "href": "pouvoir_achat.html",
+    "title": "Le pouvoir d’achat des ménages : reconstruction et décomposition",
+    "section": "",
+    "text": "Ce document reconstitue, à partir des comptes nationaux trimestriels de l’INSEE (compte de revenu des ménages, base 2020), une série annuelle et trimestrielle de l’évolution du pouvoir d’achat des ménages : le niveau et la contribution de chaque composante du revenu disponible brut (RDB), le pouvoir d’achat total et par unité de consommation (UC), et une estimation du niveau en euros par ménage et par UC. Le code source est dans R/pouvoir_achat_menages.R ; les tables produites sont dans data/insee_pouvoir_achat/pouvoir_achat_annuel.csv et ..._trimestriel.csv."
+  },
+  {
+    "objectID": "pouvoir_achat.html#méthodologie-et-limites",
+    "href": "pouvoir_achat.html#méthodologie-et-limites",
+    "title": "Le pouvoir d’achat des ménages : reconstruction et décomposition",
+    "section": "3.1 Méthodologie et limites",
+    "text": "3.1 Méthodologie et limites\n\nLe RDB, sa décomposition en composantes et les taux de croissance officiels du pouvoir d’achat (total, par personne, par ménage, par UC) sont des séries INSEE exactes, sans retraitement.\nLe nombre de ménages en niveau est ancré sur les recensements de la population (1999, 2006, 2011, 2016) puis chaîné à l’aide du taux de croissance officiel INSEE de la série “Nombre de ménages” des comptes nationaux. Le contrôle de cohérence (affiché en sortie du script R) montre un écart inférieur à 0,05 % entre le chaînage et les benchmarks de recensement sur 1999-2016 : le “euros par ménage” qui en résulte est donc fiable.\nLe nombre d’unités de consommation en niveau n’est pas publié par l’INSEE (seul son taux de croissance annuel l’est). Il est ici estimé à partir de la structure des ménages par type au recensement 2016 (personnes seules, couples, familles monoparentales, ménages complexes) et de l’échelle d’équivalence OCDE modifiée (1 UC pour le premier adulte, 0,5 pour les autres personnes de 14 ans ou plus, 0,3 pour les enfants de moins de 14 ans) — cf. data/insee_pouvoir_achat/uc_par_type_menage_2016.csv pour le détail du calcul —, puis chaîné avec le taux de croissance officiel INSEE. Le “euros par UC” est donc une estimation (ordre de grandeur, incertitude de l’ordre de ± 5 à 10 %), à la différence du “euros par ménage”. Le taux de croissance du pouvoir d’achat par UC, lui, reste la série officielle exacte et n’est pas affecté par cette approximation.\n\nChamp : France, ménages y compris entrepreneurs individuels. Sources : Insee, comptes nationaux trimestriels et annuels (base 2020) ; recensements de la population 1999-2016."
   }
 ]
