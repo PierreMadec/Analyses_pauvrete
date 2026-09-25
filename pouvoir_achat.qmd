@@ -122,6 +122,22 @@ Le @fig-niveau-trim-prix compare, sur la même période, le niveau du déflateur
 show_girafe(file.path(path_g, "pa7_niveau_trim_prix.rds"))
 ```
 
+Enfin, le @fig-niveau-composantes-rdb détaille le niveau du RDB par UC par composante (et non plus seulement sa variation, cf. @fig-decompo-trim-euros-uc), et le @fig-niveau-composantes-prix fait de même pour les prix : le niveau de chacune des 5 grandes fonctions de consommation, plutôt que leur seule contribution à la variation.
+
+```{r}
+#| label: fig-niveau-composantes-rdb
+#| fig-cap: "RDB par UC : niveau trimestriel et décomposition par composante, depuis 2017. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa8_niveau_trim_composantes_rdb.rds"))
+```
+
+```{r}
+#| label: fig-niveau-composantes-prix
+#| fig-cap: "Prix à la consommation par grande fonction, niveau trimestriel depuis 2017 (indice base 100). Source : Insee, IPC (base 2015), calculs OFCE."
+#| echo: false
+show_girafe(file.path(path_g, "pa9_niveau_trim_composantes_prix.rds"))
+```
+
 ## Méthodologie et limites
 
 - Le RDB, sa décomposition en composantes et les taux de croissance officiels du pouvoir d'achat (total, par personne, par ménage, par UC) sont des séries INSEE exactes, sans retraitement.

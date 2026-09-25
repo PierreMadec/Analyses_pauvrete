@@ -773,6 +773,110 @@ g7 <- g7_data |>
   theme(legend.position = "bottom", legend.title = element_blank(),
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8))
 
+# ==============================================================================
+# 9. Niveau trimestriel du RDB par UC décomposé par composante, et des prix
+#    par grande fonction, depuis 2017
+# ==============================================================================
+
+noms_niveau_composantes <- c(
+  "salaires_bruts", "ebe_total", "interets_dividendes_nets",
+  "prestations_sociales", "autres_ressources_nettes",
+  "impots_revenu_patrimoine", "cotisations_sociales"
+)
+
+niveau_composantes_trim <- niveaux_trim |>
+  select(trimestre, annee, trim, rdb, all_of(noms_niveau_composantes)) |>
+  mutate(nb_uc_milliers_interp = interp_uc$y) |>
+  mutate(across(all_of(noms_niveau_composantes),
+                ~ .x * 1e9 / (nb_uc_milliers_interp * 1e3), .names = "euc_{.col}")) |>
+  mutate(
+    # Impôts et cotisations sont des charges : affichées en montants négatifs
+    euc_impots_revenu_patrimoine = -euc_impots_revenu_patrimoine,
+    euc_cotisations_sociales      = -euc_cotisations_sociales,
+    euc_rdb_total = rdb * 1e9 / (nb_uc_milliers_interp * 1e3)
+  )
+
+write_csv(niveau_composantes_trim, file.path(dir_data, "pouvoir_achat_niveau_composantes_trimestriel.csv"))
+
+labels_niveau <- c(
+  salaires_bruts             = "Salaires bruts",
+  ebe_total                  = "EBE et revenu mixte (indépendants)",
+  interets_dividendes_nets   = "Revenus de la propriété",
+  prestations_sociales       = "Prestations sociales",
+  autres_ressources_nettes   = "Autres ressources nettes",
+  impots_revenu_patrimoine   = "Impôts sur le revenu et le patrimoine",
+  cotisations_sociales       = "Cotisations sociales"
+)
+
+g8_data <- niveau_composantes_trim |>
+  filter(annee >= annee_debut_niveau) |>
+  select(trimestre, annee, trim, starts_with("euc_"), -euc_rdb_total) |>
+  pivot_longer(starts_with("euc_"), names_to = "poste", values_to = "euros") |>
+  mutate(
+    poste = str_remove(poste, "^euc_"),
+    poste = factor(labels_niveau[poste], levels = unname(labels_niveau)),
+    trimestre = factor(trimestre, levels = unique(trimestre[order(annee, trim)])),
+    tooltip = paste0(poste, "\n", trimestre, " : ", scales::comma(round(euros), big.mark = " "), " € par UC"),
+    data_id = paste0(poste, "_", trimestre)
+  )
+
+g8_total <- niveau_composantes_trim |>
+  filter(annee >= annee_debut_niveau) |>
+  mutate(trimestre = factor(trimestre, levels = levels(g8_data$trimestre)))
+
+g8 <- g8_data |>
+  ggplot(aes(x = trimestre, y = euros, fill = poste)) +
+  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id), position = "stack", width = 0.8) +
+  geom_line(data = g8_total, aes(x = trimestre, y = euc_rdb_total), inherit.aes = FALSE,
+            group = 1, linewidth = 1.1, color = "black") +
+  geom_point_interactive(
+    data = g8_total |> mutate(
+      tooltip = paste0("RDB total par UC\n", trimestre, " : ",
+                        scales::comma(round(euc_rdb_total), big.mark = " "), " €"),
+      data_id = paste0("total_", trimestre)),
+    aes(x = trimestre, y = euc_rdb_total, tooltip = tooltip, data_id = data_id),
+    inherit.aes = FALSE, size = 2, color = "black"
+  ) +
+  geom_hline(yintercept = 0, linewidth = 0.4) +
+  scale_fill_manual(values = couleurs_postes_detail) +
+  scale_y_continuous(labels = scales::label_comma(big.mark = " ", suffix = " €")) +
+  labs(
+    x = NULL, y = "€ par UC (niveau trimestriel)", fill = NULL,
+    caption = "Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE. Nombre d'UC estimé (cf. méthodologie)."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8))
+
+# --- Graphique 9 : prix par grande fonction, niveau depuis 2017 ------------
+g9_data <- ipc_trim |>
+  filter(annee >= annee_debut_niveau) |>
+  arrange(division, annee, trim) |>
+  group_by(division) |>
+  mutate(indice_base100 = 100 * indice / first(indice)) |>
+  ungroup() |>
+  mutate(
+    trimestre = paste0(annee, "T", trim),
+    trimestre = factor(trimestre, levels = unique(trimestre[order(annee, trim)])),
+    poste = factor(labels_postes_detail[division], levels = unname(labels_postes_detail)),
+    tooltip = paste0(poste, "\n", trimestre, " : ", sprintf("%.1f", indice_base100)),
+    data_id = paste0(division, "_", trimestre)
+  )
+
+g9 <- g9_data |>
+  ggplot(aes(x = trimestre, y = indice_base100, color = poste, group = poste)) +
+  geom_line(linewidth = 1) +
+  geom_point_interactive(aes(tooltip = tooltip, data_id = data_id), size = 1.6) +
+  geom_hline(yintercept = 100, linewidth = 0.5, linetype = "dashed", color = "grey60") +
+  scale_color_manual(values = couleurs_postes_detail) +
+  labs(
+    x = NULL, y = paste0("Indice, base 100 en ", first(levels(g9_data$trimestre))), color = NULL,
+    caption = "Source : Insee, IPC (base 2015), calculs OFCE."
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8))
+
 # --- Sauvegarde --------------------------------------------------------------
 graphiques_pa <- list(
   pa1_decomposition_annuelle       = g1,
@@ -781,7 +885,9 @@ graphiques_pa <- list(
   pa4_decomposition_annuelle_euros = g4,
   pa5_decomposition_trim_euros_uc  = g5,
   pa6_niveau_trim_menage_uc        = g6,
-  pa7_niveau_trim_prix             = g7
+  pa7_niveau_trim_prix             = g7,
+  pa8_niveau_trim_composantes_rdb  = g8,
+  pa9_niveau_trim_composantes_prix = g9
 )
 
 walk2(names(graphiques_pa), graphiques_pa, function(nom, g) {
