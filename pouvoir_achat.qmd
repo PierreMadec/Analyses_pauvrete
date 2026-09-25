@@ -26,9 +26,11 @@ library(tidyverse)
 
 path_g <- "figure"
 
-if (!file.exists("figure/pa_annuel.rds") || !file.exists("figure/pa_trimestriel.rds")) {
-  source("R/pouvoir_achat_menages.R", local = FALSE)
-}
+# Toujours relancer le script (pas de cache conditionnel sur la présence des
+# .rds) : le pipeline est rapide et un cache basé sur l'existence des
+# fichiers de sortie masque silencieusement toute mise à jour du script tant
+# que d'anciennes sorties traînent dans figure/.
+source("R/pouvoir_achat_menages.R", local = FALSE)
 
 is_html <- knitr::is_html_output()
 show_girafe <- function(rds_path, width_svg = 10, height_svg = 6) {
@@ -70,6 +72,25 @@ Le @fig-decompo-trim reprend le même exercice au niveau trimestriel, sur les de
 #| fig-cap: "Contribution des composantes du RDB à l'évolution trimestrielle du pouvoir d'achat, huit derniers trimestres. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE."
 #| echo: false
 show_girafe(file.path(path_g, "pa3_decomposition_trim.rds"))
+```
+
+Le @fig-decompo-euros-uc reprend la même décomposition annuelle, mais exprimée en euros par unité de consommation plutôt qu'en points de croissance : chaque contribution est convertie en appliquant le taux de contribution au RDB par UC de l'année précédente, effet prix inclus, de sorte que la somme des postes approxime la variation réelle (en euros) du RDB par UC.
+
+```{r}
+#| label: fig-decompo-euros-uc
+#| fig-cap: "Contribution des composantes du RDB à la variation du RDB par unité de consommation, en euros. Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE ; nombre d'UC estimé (cf. méthodologie)."
+#| echo: false
+show_girafe(file.path(path_g, "pa4_decomposition_annuelle_euros.rds"))
+```
+
+Le @fig-decompo-trim-euros-uc reprend cette même décomposition en euros par UC au niveau **trimestriel**, depuis 2017, avec un pas supplémentaire : l'effet prix (une seule barre dans les graphiques précédents) y est détaillé par grande fonction de consommation (alimentation, tabac, produits manufacturés, énergie, services), à partir de l'indice des prix à la consommation. Ce détail est une estimation : les pondérations utilisées sont celles de 2026 (fixes sur toute la période, alors qu'elles évoluent en réalité chaque année) et la répartition entre fonctions est recalée pour que leur somme reproduise exactement l'effet prix du déflateur des comptes nationaux — seule la répartition *relative* entre fonctions provient donc de l'IPC, pas le total.
+
+```{r}
+#| label: fig-decompo-trim-euros-uc
+#| fig-cap: "Contribution des composantes du RDB, effet prix détaillé par fonction de consommation, à la variation trimestrielle du RDB par UC, en euros, depuis 2017. Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE."
+#| fig-height: 7
+#| echo: false
+show_girafe(file.path(path_g, "pa5_decomposition_trim_euros_uc.rds"), height_svg = 7)
 ```
 
 # Le RDB en euros, par ménage et par unité de consommation

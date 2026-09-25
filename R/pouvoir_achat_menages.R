@@ -273,6 +273,23 @@ compo_annuel <- niveaux_annuel |>
     euros_par_uc_reel      = euros_par_uc * 100 / deflateur_indice
   )
 
+# Postes de la décomposition (nominaux + effet prix), dans l'ordre d'affichage.
+noms_contrib <- c("contrib_salaires", "contrib_ebe", "contrib_propriete",
+                   "contrib_prestations", "contrib_autres", "contrib_impots",
+                   "contrib_cotisations", "contrib_prix")
+
+# Conversion des contributions (points de %) en euros par UC : on applique
+# chaque contribution au niveau de RDB/UC de l'année précédente
+# (contribution_euros(t) = contribution_pp(t)/100 * euros_par_uc(t-1)). La
+# somme des postes nominaux + effet prix approxime ainsi la variation réelle
+# du RDB par UC en euros (même résidu de linéarisation que la version en
+# points de %, cf. graphique 1).
+compo_annuel <- compo_annuel |>
+  mutate(
+    across(all_of(noms_contrib), ~ .x / 100 * lag(euros_par_uc), .names = "eurUC_{.col}"),
+    variation_reelle_euros_uc = pouvoir_achat_reconstitue / 100 * lag(euros_par_uc)
+  )
+
 annee_reference  <- max(compo_annuel$annee, na.rm = TRUE)   # dernière année complète (4 trimestres)
 annee_base_prix  <- max(pa_annuel$annee, na.rm = TRUE)       # année de base du déflateur (indice = 100), peut être postérieure
 
@@ -371,6 +388,51 @@ g2 <- g2_data |>
   theme_minimal(base_size = 13) +
   theme(legend.position = "bottom", legend.title = element_blank())
 
+# --- Graphique 4 : décomposition annuelle en euros par UC -------------------
+# Même décomposition que le graphique 1, mais exprimée en euros par UC plutôt
+# qu'en points de croissance (cf. section 4 pour le détail du calcul).
+g4_data <- compo_annuel |>
+  filter(annee >= annee_debut_g1, annee <= annee_reference) |>
+  select(annee, starts_with("eurUC_")) |>
+  pivot_longer(-annee, names_to = "poste", values_to = "contribution_euros") |>
+  mutate(
+    poste = str_remove(poste, "^eurUC_"),
+    poste = factor(labels_postes[poste], levels = unname(labels_postes)),
+    tooltip = paste0(poste, "\n", annee, " : ", sprintf("%+.0f", contribution_euros), " € par UC"),
+    data_id = paste0(poste, "_", annee)
+  )
+
+g4 <- g4_data |>
+  ggplot(aes(x = annee, y = contribution_euros, fill = poste)) +
+  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id),
+                        position = "stack", width = 0.7) +
+  geom_line(
+    data = compo_annuel |> filter(annee >= annee_debut_g1, annee <= annee_reference),
+    aes(x = annee, y = variation_reelle_euros_uc), inherit.aes = FALSE,
+    linewidth = 1.1, color = "black"
+  ) +
+  geom_point_interactive(
+    data = compo_annuel |> filter(annee >= annee_debut_g1, annee <= annee_reference) |>
+      mutate(tooltip = paste0("Variation réelle du RDB par UC\n", annee, " : ",
+                               sprintf("%+.0f", variation_reelle_euros_uc), " €"),
+             data_id = paste0("variation_reelle_", annee)),
+    aes(x = annee, y = variation_reelle_euros_uc, tooltip = tooltip, data_id = data_id),
+    inherit.aes = FALSE, size = 2.2, color = "black"
+  ) +
+  geom_hline(yintercept = 0, linewidth = 0.4) +
+  scale_y_continuous(labels = scales::label_comma(big.mark = " ", suffix = " €")) +
+  labs(
+    x = NULL, y = "€ par UC, variation par rapport à l'année précédente", fill = NULL,
+    caption = paste0(
+      "Source : Insee, comptes nationaux trimestriels, base 2020, calculs OFCE. ",
+      "Contribution de chaque poste = contribution en points de % (graphique 1) × RDB par UC de ",
+      "l'année précédente. La ligne noire (somme des postes, effet prix inclus) approxime la ",
+      "variation réelle du RDB par UC en euros ; nombre d'UC ESTIMé (cf. méthodologie, graphique 2)."
+    )
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom", legend.title = element_blank())
+
 # --- Graphique 3 : décomposition trimestrielle récente (8 derniers trimestres)
 derniers_trim <- pa_trimestriel |> slice_max(order_by = annee * 10 + trim, n = 8) |> pull(trimestre)
 
@@ -409,11 +471,187 @@ g3 <- g3_data |>
   theme(legend.position = "bottom", legend.title = element_blank(),
         axis.text.x = element_text(angle = 45, hjust = 1))
 
+# ==============================================================================
+# 7. Décomposition trimestrielle en euros par UC, effet prix détaillé par
+#    grande fonction de consommation, depuis 2017
+# ==============================================================================
+#
+# Sources supplémentaires :
+#   - data/insee_pouvoir_achat/ipc_5divisions_mensuel.csv
+#       Indices mensuels 1990-2025 de l'IPC (base 2015, ensemble des ménages,
+#       France) pour les 5 grandes fonctions de consommation (Alimentation,
+#       Tabac, Produits manufacturés, Énergie, Services), extraits des séries
+#       longues Insee (idbanks 001759963/966/967/968/969).
+#   - data/insee_pouvoir_achat/ipc_ponderations_2026.csv
+#       Pondérations 2026 de ces 5 fonctions dans le panier de l'IPC (Insee,
+#       Informations rapides IPC août 2026, n° 218).
+#
+# ATTENTION : l'IPC (indice des prix à la consommation) n'est pas exactement
+# le déflateur de la consommation des comptes nationaux utilisé pour
+# "contrib_prix" (concepts proches mais pas identiques), et les pondérations
+# utilisées ici sont celles de 2026 seules, appliquées à tout l'historique
+# (elles évoluent en réalité chaque année). Pour rester cohérent avec le
+# reste de la décomposition, la contribution brute de chaque fonction
+# (poids x évolution trimestrielle) est donc RECALÉE proportionnellement pour
+# que la somme des 5 postes reproduise exactement "contrib_prix" (déflateur)
+# à chaque trimestre : seule la répartition *relative* entre fonctions est
+# donc estimée à partir de l'IPC, pas le total de l'effet prix.
+ipc_mensuel      <- read_csv(file.path(dir_data, "ipc_5divisions_mensuel.csv"), show_col_types = FALSE)
+ipc_ponderations <- read_csv(file.path(dir_data, "ipc_ponderations_2026.csv"), show_col_types = FALSE)
+
+ipc_trim <- ipc_mensuel |>
+  mutate(trim = ceiling(mois / 3)) |>
+  group_by(division, annee, trim) |>
+  summarise(indice = mean(indice), .groups = "drop") |>
+  arrange(division, annee, trim) |>
+  group_by(division) |>
+  mutate(g_ipc = 100 * (indice / lag(indice) - 1)) |>
+  ungroup() |>
+  left_join(ipc_ponderations, by = "division") |>
+  mutate(contrib_brute = poids_pour_10000 / 10000 * g_ipc)
+
+ipc_trim_total <- ipc_trim |>
+  group_by(annee, trim) |>
+  summarise(contrib_brute_totale = sum(contrib_brute, na.rm = TRUE), .groups = "drop")
+
+# --- Interpolation trimestrielle du nombre d'UC (seule la série annuelle existe) --
+uc_annuel_pour_interp <- pa_annuel |>
+  filter(!is.na(nb_uc_milliers)) |>
+  transmute(t = annee + 0.5, nb_uc_milliers)  # ancrage mi-année
+interp_uc <- approx(uc_annuel_pour_interp$t, uc_annuel_pour_interp$nb_uc_milliers,
+                     xout = niveaux_trim$annee + (niveaux_trim$trim - 0.5) / 4, rule = 2)
+
+noms_contrib_nominal <- c("contrib_salaires", "contrib_ebe", "contrib_propriete",
+                           "contrib_prestations", "contrib_autres", "contrib_impots",
+                           "contrib_cotisations")
+
+pa_trimestriel_uc <- niveaux_trim |>
+  select(trimestre, annee, trim, rdb) |>
+  mutate(
+    nb_uc_milliers_interp = interp_uc$y,
+    euros_par_uc = rdb * 1e9 / (nb_uc_milliers_interp * 1e3)
+  ) |>
+  left_join(pa_trimestriel |>
+              select(trimestre, all_of(noms_contrib_nominal), contrib_prix,
+                     pouvoir_achat_reconstitue),
+            by = "trimestre") |>
+  left_join(ipc_trim_total, by = c("annee", "trim")) |>
+  mutate(
+    facteur_recalage = contrib_prix / contrib_brute_totale,
+    across(all_of(noms_contrib_nominal), ~ .x / 100 * lag(euros_par_uc), .names = "eurUC_{.col}"),
+    variation_reelle_euros_uc = pouvoir_achat_reconstitue / 100 * lag(euros_par_uc)
+  )
+
+ipc_trim_recale <- ipc_trim |>
+  left_join(pa_trimestriel_uc |> select(annee, trim, facteur_recalage, euros_par_uc),
+            by = c("annee", "trim")) |>
+  group_by(division) |>
+  arrange(annee, trim, .by_group = TRUE) |>
+  mutate(
+    contrib_pp_recale = contrib_brute * facteur_recalage,
+    contrib_euros_uc  = contrib_pp_recale / 100 * lag(euros_par_uc)
+  ) |>
+  ungroup() |>
+  mutate(trimestre = paste0(annee, "T", trim))
+
+# --- Étiquettes et couleurs de la décomposition détaillée -------------------
+labels_postes_detail <- c(
+  contrib_salaires        = "Salaires bruts",
+  contrib_ebe             = "EBE et revenu mixte (indépendants)",
+  contrib_propriete       = "Revenus de la propriété",
+  contrib_prestations     = "Prestations sociales",
+  contrib_autres          = "Autres ressources nettes",
+  contrib_impots          = "Impôts sur le revenu et le patrimoine",
+  contrib_cotisations     = "Cotisations sociales",
+  alimentation            = "Effet prix : alimentation",
+  tabac                   = "Effet prix : tabac",
+  produits_manufactures   = "Effet prix : produits manufacturés",
+  energie                 = "Effet prix : énergie",
+  services                = "Effet prix : services"
+)
+couleurs_postes_detail <- c(
+  "Salaires bruts"                        = "#4E79A7",
+  "EBE et revenu mixte (indépendants)"    = "#59A14F",
+  "Revenus de la propriété"               = "#B07AA1",
+  "Prestations sociales"                  = "#76B7B2",
+  "Autres ressources nettes"              = "#9C755F",
+  "Impôts sur le revenu et le patrimoine" = "#BAB0AC",
+  "Cotisations sociales"                  = "#499894",
+  "Effet prix : alimentation"             = "#E15759",
+  "Effet prix : tabac"                    = "#EDC948",
+  "Effet prix : produits manufacturés"    = "#F28E2B",
+  "Effet prix : énergie"                  = "#8B0000",
+  "Effet prix : services"                 = "#FF9D9A"
+)
+
+annee_debut_g5 <- 2017
+
+g5_nominal <- pa_trimestriel_uc |>
+  filter(annee >= annee_debut_g5) |>
+  select(trimestre, annee, trim, starts_with("eurUC_")) |>
+  pivot_longer(starts_with("eurUC_"), names_to = "poste", values_to = "contribution_euros") |>
+  mutate(poste = str_remove(poste, "^eurUC_"))
+
+g5_prix <- ipc_trim_recale |>
+  filter(annee >= annee_debut_g5) |>
+  select(trimestre, annee, trim, poste = division, contribution_euros = contrib_euros_uc)
+
+g5_data <- bind_rows(g5_nominal, g5_prix) |>
+  mutate(
+    trimestre = factor(trimestre, levels = unique(trimestre[order(annee, trim)])),
+    poste = factor(labels_postes_detail[poste], levels = unname(labels_postes_detail)),
+    tooltip = paste0(poste, "\n", trimestre, " : ", sprintf("%+.0f", contribution_euros), " € par UC"),
+    data_id = paste0(poste, "_", trimestre)
+  )
+
+g5_ligne <- pa_trimestriel_uc |>
+  filter(annee >= annee_debut_g5) |>
+  mutate(trimestre = factor(trimestre, levels = levels(g5_data$trimestre)))
+
+g5 <- g5_data |>
+  ggplot(aes(x = trimestre, y = contribution_euros, fill = poste)) +
+  geom_col_interactive(aes(tooltip = tooltip, data_id = data_id),
+                        position = "stack", width = 0.7) +
+  geom_line(
+    data = g5_ligne, aes(x = trimestre, y = variation_reelle_euros_uc), inherit.aes = FALSE,
+    group = 1, linewidth = 1.1, color = "black"
+  ) +
+  geom_point_interactive(
+    data = g5_ligne |>
+      mutate(tooltip = paste0("Variation réelle du RDB par UC\n", trimestre, " : ",
+                               sprintf("%+.0f", variation_reelle_euros_uc), " €"),
+             data_id = paste0("variation_reelle_", trimestre)),
+    aes(x = trimestre, y = variation_reelle_euros_uc, tooltip = tooltip, data_id = data_id),
+    inherit.aes = FALSE, size = 2, color = "black"
+  ) +
+  geom_hline(yintercept = 0, linewidth = 0.4) +
+  scale_fill_manual(values = couleurs_postes_detail) +
+  scale_y_continuous(labels = scales::label_comma(big.mark = " ", suffix = " €")) +
+  labs(
+    x = NULL, y = "€ par UC, variation par rapport au trimestre précédent", fill = NULL,
+    caption = paste0(
+      "Source : Insee, comptes nationaux trimestriels et IPC (base 2015), calculs OFCE. ",
+      "L'effet prix est décomposé par grande fonction de consommation à partir de l'IPC, ",
+      "pondérations 2026, recalé pour sommer exactement à l'effet prix du déflateur des comptes ",
+      "nationaux (cf. méthodologie) ; nombre d'UC trimestriel interpolé à partir de l'estimation annuelle."
+    )
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom", legend.title = element_blank(),
+        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 8),
+        legend.text = element_text(size = 9)) +
+  guides(fill = guide_legend(nrow = 3))
+
+write_csv(pa_trimestriel_uc, file.path(dir_data, "pouvoir_achat_trimestriel_euros_uc.csv"))
+write_csv(ipc_trim_recale, file.path(dir_data, "ipc_contributions_trimestrielles.csv"))
+
 # --- Sauvegarde --------------------------------------------------------------
 graphiques_pa <- list(
-  pa1_decomposition_annuelle = g1,
-  pa2_euros_menage_uc        = g2,
-  pa3_decomposition_trim     = g3
+  pa1_decomposition_annuelle       = g1,
+  pa2_euros_menage_uc              = g2,
+  pa3_decomposition_trim           = g3,
+  pa4_decomposition_annuelle_euros = g4,
+  pa5_decomposition_trim_euros_uc  = g5
 )
 
 walk2(names(graphiques_pa), graphiques_pa, function(nom, g) {
